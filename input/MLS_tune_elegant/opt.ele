@@ -1,0 +1,65 @@
+! Run with no noise
+
+&run_setup
+        lattice = run0.new,
+        use_beamline = RING,
+        p_central_mev = 629,
+        default_order = 3,
+	   semaphore_file = %s.done,
+        wrap_around = 0,
+	rootname = <rootname>,
+&end
+
+&rpn_load
+	filename = run0.twi
+	tag = ref
+&end
+&rpn_load
+	filename = run0.twi
+	tag = ref
+	load_parameters = 1
+&end
+
+&twiss_output 
+   filename=%s.twi,
+   matched = 1,
+   radiation_integrals = 1,
+   concat_order=3,
+&end
+
+&run_control
+!        n_passes = 20000
+&end
+&alter_elements name=CAVITY, type=RFCA, item=PHASE, value=180 &end
+&alter_elements name=*, type=CSBEN*, item=N_KICKS, value=60 &end
+&alter_elements name=*, type=KQUAD*, item=N_KICKS, value=40 &end
+&alter_elements name=*, type=KSEXT*, item=N_KICKS, value=40 &end
+
+
+
+&optimization_setup
+        tolerance = 1e-6,
+        n_passes = 3,
+        n_restarts = 0,
+        n_evaluations = 500,
+        verbose = 1
+&end
+
+!Linear momentum compaction factor targetting value can be set to the desired number
+! Frist order momentum compaction factor
+&optimization_term
+        term = "alphac <APVAL> 1E-7 sene" &end
+
+&optimization_variable
+        name = Q2 item = K1, lower_limit=-10, upper_limit = 10, step_size = 0.1 &end
+&optimization_variable
+        name = Q3 item = K1, lower_limit=-10, upper_limit = 10, step_size = 0.1 &end
+
+
+
+&bunched_beam  
+&end
+
+&optimize &end
+
+&save_lattice filename = %s.new &end

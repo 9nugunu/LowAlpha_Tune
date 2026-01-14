@@ -1,0 +1,7 @@
+dispersion -> chromaticity -> x 방향 tune spread 발생...
+
+synchronous tune 이 크다. -> one turn에 길이방향 분포가 바뀌는 정도가 크다.
+
+n turn 에 초점거리차이로 인한 chromaticity effect로 빔 퍼짐..
+이때 nu_s 값이 작다... -> 영향을 받았던 입자가 더 오랫동안 chomaticity effect 같은 값으로 받음.. -> x offset 증가
+nu_s 값이 크다 -> 오차보정이 이뤄지면서 x offset 억제..

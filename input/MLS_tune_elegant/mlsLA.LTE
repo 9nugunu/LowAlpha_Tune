@@ -1,0 +1,106 @@
+Bend: CSBEND,L=1.2,ANGLE="pi 4 /",HGAP=0.025,FINT=0.50, &
+      N_KICKS=60,E1="pi 8 /",E2="pi 8 /",integration_order=4, &
+      nonlinear=1!, synch_rad=1
+!      USE_RAD_DIST=1
+
+cavity: RFCA,L=0.0,FREQ="6245674.147285046 80 mult",VOLT=0.5e6, &
+        PHASE=180!, LOCK_PHASE=1
+
+DQQ: DRIFT,L=0.15
+DQO: DRIFT,L=0.125
+DQB: DRIFT,L=0.425
+DSS: DRIFT,L=0.3
+DHL: DRIFT,L=3.0
+DHL_HC: DRIFT,L=3.0
+DHK: DRIFT,L=1.25
+DHK1: DRIFT,L=0.1
+
+Dtest: DRIFT,L=0.05
+
+
+% 3.17930 sto VQ1M2K1
+% 3.46049 sto VQ1M1L2
+% -4.47299 sto VQ2M2K1
+% -4.10793 sto VQ2M1L2
+% 5.01444 sto VQ3M2K1
+% 4.89629 sto VQ3M1L2
+
+
+Q1: KQUAD, L=0.2, K1="VQ1M2K1",  N_KICKS=40!, synch_rad=1
+Q2: KQUAD, L=0.2, K1="VQ1M1L2",  N_KICKS=40!, synch_rad=1
+Q3: KQUAD, L=0.2, K1="VQ2M2K1",  N_KICKS=40!, synch_rad=1
+Q4: KQUAD, L=0.2, K1="VQ2M1L2",  N_KICKS=40!, synch_rad=1
+Q5: KQUAD, L=0.2, K1="VQ3M2K1", N_KICKS=40!, synch_rad=1
+Q6: KQUAD, L=0.2, K1="VQ3M1L2", N_KICKS=40!, synch_rad=1
+
+
+
+% 3.388168e+01 sto KS11
+% 4.255679e+01 sto KS12
+% -7.905967e+01 sto KS21
+% -4.574217e+01 sto KS22
+% -5.531249678643663792e-01 sto KS31
+% -2.400000000000000000e+01 sto KS32
+
+
+% KS11 sto S1P1
+% KS12 sto S1P2
+% KS21 sto S2P1
+% KS22 sto S2P2
+% KS31 sto S3P1
+% KS32 sto S3P2
+
+
+S1: KSEXT, L=0.1, K2="S1P1", SYNCH_RAD=0, N_KICKS=40!, synch_rad=1
+S2: KSEXT, L=0.1, K2="S1P2", SYNCH_RAD=0, N_KICKS=40!, synch_rad=1
+S3: KSEXT, L=0.1, K2="S2P1", SYNCH_RAD=0, N_KICKS=40!, synch_rad=1
+S4: KSEXT, L=0.1, K2="S2P2", SYNCH_RAD=0, N_KICKS=40!, synch_rad=1
+S5: KSEXT, L=0.1, K2="S3P1", SYNCH_RAD=0, N_KICKS=40!, synch_rad=1
+S6: KSEXT, L=0.1, K2="S3P2", SYNCH_RAD=0, N_KICKS=40!, synch_rad=1
+
+
+% 5.425116972517313343e+02 sto KOV1
+% 7.388604446046615521e+02 sto KOV2
+
+% KOV1 sto OCTO1
+% KOV1 sto OCTO2
+% KOV2 sto OCTO3
+% KOV2 sto OCTO4
+
+OS2: KOCT, K3="OCTO1", L=0.1,N_KICKS=40!, synch_rad=1
+OS4: KOCT, K3="OCTO2", L=0.1,N_KICKS=40!, synch_rad=1
+OS6: KOCT, K3="OCTO3", L=0.1,N_KICKS=40!, synch_rad=1
+OS8: KOCT, K3="OCTO4", L=0.1,N_KICKS=40!, synch_rad=1
+
+septum: MARK
+undulator: MARK
+rwcenter: MARK
+rwstart: MARK
+rwend: MARK
+rc: recirc
+
+
+RW: DRIFT,L=2.3
+HVS1s: LINE=(septum,DHK)
+VS2: LINE=(S6,DQQ,Q5,DQQ,Q3,DQB,Bend,DQB,S4,DSS,S2,DQQ,Q1,&
+DQO,OS2,DQO,Q2,DQQ,S1,DSS,S3,DQB,Bend,DQB,Q4,DQQ,Q6,DQQ,S5)
+VS3: LINE=(DHL,undulator,DHL)
+VS4: LINE=(S6,DQQ,Q6,DQQ,Q4,DQB,Bend,DQB,S4,DSS,S2,DQQ,Q2,&
+DQO,OS4,DQO,Q1,DQQ,S1,DSS,S3,DQB,Bend,DQB,Q3,DQQ,Q5,DQQ,S5)
+VS5: LINE=(rwstart,DHK1,RW,DHK1,rwend)
+VS6: LINE=(S6,DQQ,Q5,DQQ,Q3,DQB,Bend,DQB,S4,DSS,S2,DQQ,Q1,&
+DQO,OS6,DQO,Q1,DQQ,S1,DSS,S3,DQB,Bend,DQB,Q4,DQQ,Q6,DQQ,S5)
+VS7: LINE=(DHL_HC,cavity,DHL_HC)
+VS8: LINE=(S6,DQQ,Q6,DQQ,Q4,DQB,Bend,DQB,S4,DSS,S2,DQQ,Q1,&
+DQO,OS8,DQO,Q1,DQQ,S1,DSS,S3,DQB,Bend,DQB,Q3,DQQ,Q5,DQQ,S5)
+HVS1e: LINE=(DHK)
+
+mal: malign
+INI: MALIGN
+Wisland: watch, filename="%s.w1", mode= centroid
+Wislandp: watch, filename="%s.w2"
+
+RING: LINE=(mal,rc,INI,Wisland,Wislandp,HVS1s,VS2,VS3,VS4,VS5,VS6,VS7,VS8,HVS1e)
+USE,RING
+
+RETURN
