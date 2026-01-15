@@ -1,0 +1,30 @@
+&run_setup
+    lattice = <lattice>,
+    use_beamline = RING,
+    p_central_mev = 629,
+    rootname = <rootname>,
+    parameters = %s.param,
+    default_order = 3,
+&end
+
+&twiss_output
+    filename = %s_check.twi,
+    matched = 1,
+    radiation_integrals = 1,
+    concat_order=3,
+&end
+
+&alter_elements
+    name=MAL, item=DP, value=<DELTA>
+&end
+
+&run_control
+    n_passes = 100000,
+&end
+
+&bunched_beam
+    n_particles_per_bunch = 1,
+&end
+
+&track
+&end
