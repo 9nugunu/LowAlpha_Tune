@@ -5,13 +5,12 @@ from numpy.fft import fft, fftshift, fftfreq
 from pathlib import Path
 import os
 import argparse
+from scipy.signal import find_peaks
 
 # --- Constants from MLS.py ---
 c0 = 299792458
 T0 = 48 / c0  # Revolution period for MLS (Circumference 48m)
-vx = 1.1144067
-vz = 0.007082
-bw = 0.05
+bw = 0.001
 
 # --- Paths ---
 BASE_DIR = Path(__file__).parent
@@ -38,7 +37,7 @@ def get_column(fpath, col_name):
         print(f"Warning: Column '{col_name}' not found in {fpath.name}")
         return None
 
-def filtering_norm(freq, data, cen_f, cutoff, ttt):
+def filtering_norm(freq, data, cen_f, cutoff, ttt, vz=0.0):
     """Frequency filtering logic from MLS.py."""
     lowband = cen_f - cutoff/2.0
     highband = cen_f + cutoff/2.0
@@ -47,15 +46,13 @@ def filtering_norm(freq, data, cen_f, cutoff, ttt):
     for i in range(len(freq)):
         f_abs = np.abs(freq[i])
         if ttt == 2:
-            # Sideband filtering logic
             if (lowband - vz < f_abs < highband - vz) or (lowband + vz < f_abs < highband + vz):
-                pass
+                tmp[i] = data[i]
             else:
                 tmp[i] = 0
         else:
-            # Standard bandpass logic
             if lowband < f_abs < highband:
-                pass
+                tmp[i] = data[i]
             else:
                 tmp[i] = 0
     return tmp
@@ -78,16 +75,47 @@ def plot_spectrum(fpath):
     freq = fftshift(fftfreq(n, T0)) * 1e-6  # Frequency in MHz
     
     # --- Horizontal (X) Analysis ---
-    x_fft_main = fftshift(fft(x))
+    x_fft_main = fftshift(fft(x.ravel()))
+    amp_x = np.abs(x_fft_main)
+
+    # --- Peak Detection (Same as process_scan_results.py) ---
+    h_threshold = np.max(amp_x) / 20.
+    peaks, _ = find_peaks(amp_x, prominence=h_threshold, height=h_threshold, distance=3)
     
-    # Replicate filtering from MLS.py
-    x_filt_1 = filtering_norm(freq, x_fft_main, vx, bw, 0)
-    x_filt_2 = filtering_norm(freq, x_fft_main, vz, bw, 1) # Note: naming suggests vz but filtering logic depends on ttt
-    x_filt_3 = filtering_norm(freq, x_fft_main, vx, bw, 2) # Sideband?
+    cal_peak = []
+    for i in peaks:
+        if freq[i] > 0:
+            cal_peak.append([freq[i], amp_x[i]])
+    cal_peak = np.array(cal_peak)
+
+    vxs, vzs = [], []
+    if len(cal_peak) > 0:
+        for k in range(len(cal_peak)):
+            if 0.0 < cal_peak[k][0] < 0.1:
+                vzs.append(cal_peak[k])
+            elif cal_peak[k][0] > 1.0:
+                vxs.append(cal_peak[k])
+    
+    vxs = np.array(vxs)
+    vzs = np.array(vzs)
+    
+    vx_det, vz_det = 0.0, 0.0
+    if len(vxs) > 0:
+        vx_det = vxs[vxs[:, 1].argsort()][-1, 0]
+    if len(vzs) > 0:
+        vz_det = vzs[vzs[:, 1].argsort()][-1, 0]
+    
+    print(f"Detected vx: {vx_det:.6f} MHz, vz: {vz_det:.6f} MHz")
+
+    # Replicate filtering from process_scan_results.py
+    # For X: Take sidebands of vx (ttt=2)
+    x_filt_side = filtering_norm(freq, x_fft_main, vx_det, bw, 2, vz=vz_det)
 
     # --- Longitudinal (Z) Analysis ---
-    z_dist = dt * c0
+    z_dist = dt.ravel() * c0
     z_fft_main = fftshift(fft(z_dist))
+    # For Z: Take main sync peak (ttt=0)
+    z_filt_main = filtering_norm(freq, z_fft_main, vz_det, bw, 0)
 
     # --- Plotting ---
     fig, axes = plt.subplots(2, 1, figsize=(12, 10))
@@ -97,22 +125,36 @@ def plot_spectrum(fpath):
     freq_p = freq[mask]
     
     # X Plot (overlay original and filtered)
-    axes[0].semilogy(freq_p, np.abs(x_fft_main[mask]), label='Original', color='gray', alpha=0.5)
-    axes[0].semilogy(freq_p, np.abs(x_filt_1[mask]), label=f'Filtered (Tune X={vx:.4f})', color='red')
-    axes[0].semilogy(freq_p, np.abs(x_filt_2[mask]), label=f'Filtered (Tune Z peak?)', color='green')
-    axes[0].semilogy(freq_p, np.abs(x_filt_3[mask]), label=f'Filtered (Sideband?)', color='blue')
+    axes[0].semilogy(freq_p, np.abs(x_fft_main[mask]), label='X Original', color='gray', alpha=0.3)
+    axes[0].semilogy(freq_p, np.abs(x_filt_side[mask]), label='X Sidebands (Filtered)', color='red', linewidth=1.5)
     
-    axes[0].set_title(f"Horizontal Spectrum (X) - {fpath.name}", fontsize=14, fontweight='bold')
-    axes[0].set_ylabel("Amplitude", fontsize=12, fontweight='bold')
-    axes[0].legend(loc='upper right')
-    axes[0].grid(True, which="both", ls=":", alpha=0.5)
+    if vx_det > 0:
+        axes[0].axvline(vx_det, color='blue', linestyle='--', alpha=0.5, label=f'vx={vx_det:.4f}')
+        if vz_det > 0:
+            # Mark sidebands
+            axes[0].axvline(vx_det - vz_det, color='orange', linestyle=':', label='vx-vz')
+            axes[0].axvline(vx_det + vz_det, color='orange', linestyle=':', label='vx+vz')
+            axes[0].axvspan(vx_det - vz_det - bw/2, vx_det - vz_det + bw/2, color='orange', alpha=0.2)
+            axes[0].axvspan(vx_det + vz_det - bw/2, vx_det + vz_det + bw/2, color='orange', alpha=0.2)
+
+    axes[0].set_title(f"Horizontal Spectrum (X) - {fpath.name}")
+    axes[0].set_ylabel("Amplitude")
+    axes[0].legend(loc='upper right', fontsize='small')
+    axes[0].set_xlim(vx_det - 0.05, vx_det + 0.05) if vx_det > 0 else axes[0].set_xlim(0, 2)
 
     # Z Plot
-    axes[1].semilogy(freq_p, np.abs(z_fft_main[mask]), label='Original', color='blue')
-    # Add horizontal/longitudinal labels consistent with MLS.py if needed
-    axes[1].set_title(f"Longitudinal Spectrum (Z) - {fpath.name}", fontsize=14, fontweight='bold')
-    axes[1].set_xlabel("Frequency [MHz]", fontsize=12, fontweight='bold')
-    axes[1].set_ylabel("Amplitude", fontsize=12, fontweight='bold')
+    axes[1].semilogy(freq_p, np.abs(z_fft_main[mask]), label='Z Original', color='gray', alpha=0.3)
+    axes[1].semilogy(freq_p, np.abs(z_filt_main[mask]), label='Z Main Peak (Filtered)', color='green', linewidth=1.5)
+    
+    if vz_det > 0:
+        axes[1].axvline(vz_det, color='green', linestyle='--', label=f'vz={vz_det:.4e}')
+        axes[1].axvspan(vz_det - bw/2, vz_det + bw/2, color='green', alpha=0.2)
+
+    axes[1].set_title(f"Longitudinal Spectrum (Z) - {fpath.name}")
+    axes[1].set_ylabel("Amplitude")
+    axes[1].set_xlabel("Frequency [MHz]")
+    axes[1].legend(loc='upper right', fontsize='small')
+    axes[1].set_xlim(0, 0.1)
     axes[1].grid(True, which="both", ls=":", alpha=0.5)
 
     plt.tight_layout()

@@ -14,6 +14,7 @@ import json
 import re
 from scipy.fftpack import fft, fftshift, fftfreq, ifft, ifftshift
 from scipy.signal import find_peaks
+import pandas as pd
 
 # Plot style
 plt.switch_backend("Agg")
@@ -50,7 +51,8 @@ def get_latest_scan_dir():
         PROJECT_ROOT / "scan_elegant" / "results",
         PROJECT_ROOT / "output" / "scan_alphac_pyele",
         PROJECT_ROOT / "results",
-        PROJECT_ROOT / "input" / "results" / "scan_elegant" / "results"
+        PROJECT_ROOT / "input" / "results" / "scan_elegant" / "results",
+        PROJECT_ROOT / "Archieves",
     ]
     
     # 1. Priority: Explicitly specified directory
@@ -114,25 +116,47 @@ def col_page(filename, column):
     col_data = temp.columnData[temp.columnName.index(column)]
     return np.array(col_data)
 
+def filtering_norm(freq, data, cen_f, cutoff, ttt, vz=0.0):
+    """
+    Frequency filtering logic.
+    ttt=0: Main peak bandpass (BP filter around cen_f)
+    ttt=2: Sideband bandpass (BP filter around cen_f +/- vz)
+    """
+    lowband = cen_f - cutoff/2.0
+    highband = cen_f + cutoff/2.0
+    tmp = np.zeros_like(data) # Initialize with zeros to act like the legacy 'else: 0'
+    
+    for i in range(len(freq)):
+        f_abs = np.abs(freq[i])
+        if ttt == 2:
+            # Sideband filtering: Keeps vx - vz and vx + vz
+            if (lowband - vz < f_abs < highband - vz) or (lowband + vz < f_abs < highband + vz):
+                tmp[i] = data[i]
+        else:
+            # Standard bandpass: Keeps cen_f (used for vz in longitudinal)
+            if lowband < f_abs < highband:
+                tmp[i] = data[i]
+    return tmp
+
 def amp_cal(p):
     fdir, valD, valA = p
-    # os.chdir(fdir)  # Removed unsafe chdir
     file_name = f"opt_A{valA:.2e}_D{valD:.2e}_check.w2"
     fpath = fdir / file_name
 
-    if fpath.exists():
+    if not fpath.exists():
+        print(f"Missing: {fpath}")
+        return [0.0, 0.0, 0.0, 0.0]
+
+    try:
         x = col_page(str(fpath), "x")
-        # xp = col_page(str(fpath), "xp") # Use fpath (absolute) not just filename
         t = col_page(str(fpath), "dt") * c0
-        # p = col_page(str(fpath), "p")
-
-    
+        
         freq = fftshift(fftfreq(len(x), T0)) / 10**6
-        fz = fftshift(fft(t.ravel()))
-        fx = fftshift(fft(x.ravel()))
+        fft_x = fftshift(fft(x.ravel()))
+        fft_z = fftshift(fft(t.ravel()))
 
-        # Correct prominence/height to use absolute amplitude
-        amp_x = np.abs(fx)
+        # --- Peak Detection (Initial for Tune Determination) ---
+        amp_x = np.abs(fft_x)
         h_threshold = np.max(amp_x) / 20.
         peaks, _ = find_peaks(amp_x, prominence=h_threshold, height=h_threshold, distance=3)
 
@@ -143,12 +167,11 @@ def amp_cal(p):
         cal_peak = np.array(cal_peak)
 
         vxs, vzs = [], []
-        if len(cal_peak) > 0:
-            for k in range(len(cal_peak)):
-                if 0.0 < cal_peak[k][0] < 0.1:
-                    vzs.append(cal_peak[k])
-                elif cal_peak[k][0] > 1:
-                    vxs.append(cal_peak[k])
+        for k in range(len(cal_peak)):
+            if 0.001 < cal_peak[k][0] < 0.1:
+                vzs.append(cal_peak[k])
+            elif cal_peak[k][0] > 1:
+                vxs.append(cal_peak[k])
         vxs = np.array(vxs)
         vzs = np.array(vzs)
 
@@ -158,130 +181,103 @@ def amp_cal(p):
         if len(vzs) > 0:
             vz = vzs[vzs[:, 1].argsort()][-1, 0]
 
-        # --- Debug Plot for Peak Verification (Sample ~2%) ---
+        # --- Sideband Detection (X Spectrum) ---
+        vz_sb_left = 0.0
+        vz_sb_right = 0.0
+        
+        if vx > 0 and len(cal_peak) > 0:
+            # Find closest peaks to vx
+            candidates = cal_peak[cal_peak[:, 0] > 1.0] # Only look at high freq
+            
+            # Left Sideband
+            left_candidates = candidates[candidates[:, 0] < vx]
+            if len(left_candidates) > 0:
+                # Get the one with highest frequency (closest to vx from left)
+                sb_left_idx = np.argmax(left_candidates[:, 0])
+                sb_left_freq = left_candidates[sb_left_idx, 0]
+                # Check if it's within reasonable range (e.g. < 100kHz distance)
+                if (vx - sb_left_freq) < 0.1:
+                    vz_sb_left = vx - sb_left_freq
+
+            # Right Sideband
+            right_candidates = candidates[candidates[:, 0] > vx]
+            if len(right_candidates) > 0:
+                # Get the one with lowest frequency (closest to vx from right)
+                sb_right_idx = np.argmin(right_candidates[:, 0])
+                sb_right_freq = right_candidates[sb_right_idx, 0]
+                if (sb_right_freq - vx) < 0.1:
+                    vz_sb_right = sb_right_freq - vx
+
+        # --- Debug Plot with Subplots (Zoomed vz and vx sidebands) ---
         if (vx > 0 or vz > 0) and np.random.random() < 0.02:
             debug_dir = OUT_DIR / "debug_peaks"
             debug_dir.mkdir(parents=True, exist_ok=True)
-            plt.figure(figsize=(10, 6))
-            mask = freq > 0
-            plt.semilogy(freq[mask], amp_x[mask], label='X Spectrum', color='gray', alpha=0.6)
-            if vx > 0:
-                plt.axvline(vx, color='r', linestyle='--', label=f'vx={vx:.4f} MHz')
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+            bw_debug = 0.001 # Bandwidth used for filtering
+            
+            # Subplot 1: Z-Tune (Synchrotron) - Focused on 0-0.15 MHz
+            mask1 = (freq >= 0) & (freq < 0.1)
+            ax1.semilogy(freq[mask1], np.abs(fft_z[mask1]), color='royalblue', alpha=0.7, label='Z Spectrum')
             if vz > 0:
-                plt.axvline(vz, color='g', linestyle='--', label=f'vz={vz:.4f} MHz')
-            plt.title(f"Debug Peaks: A={valA:.2e}, D={valD:.2e}")
-            plt.xlabel("Frequency [MHz]")
-            plt.ylabel("Amplitude")
-            plt.legend()
-            plt.grid(True, which='both', ls=':', alpha=0.5)
-            plt.savefig(debug_dir / f"check_A{valA:.2e}_D{valD:.2e}.png", dpi=120)
+                ax1.axvline(vz, color='g', linestyle='--', label=f'vz={vz:.4f} MHz')
+                ax1.axvspan(vz - bw_debug/2, vz + bw_debug/2, color='green', alpha=0.2, label='vz filter')
+            ax1.set_title(f"Z-Tune Zoom (Synchrotron)")
+            ax1.set_xlabel("Frequency [MHz]")
+            ax1.set_ylabel("Amplitude")
+            ax1.grid(True, which='both', ls=':', alpha=0.5)
+            ax1.legend(fontsize=9)
+
+            # Subplot 2: X-Tune & Sidebands - Zoomed around vx
+            span = max(vz * 2.5, 0.05) # Dynamic zoom based on vz, at least 50kHz
+            mask2 = (freq > vx - span) & (freq < vx + span)
+            ax2.semilogy(freq[mask2], np.abs(fft_x[mask2]), color='indianred', alpha=0.7, label='X Spectrum')
+            if vx > 0:
+                ax2.axvline(vx, color='blue', linestyle='--', alpha=0.4, label=f'vx={vx:.4f} MHz')
+                if vz > 0:
+                    # Sidebands vx +/- vz
+                    ax2.axvline(vx - vz, color='orange', linestyle=':', label=f'vx-vz ({vx-vz:.4f})')
+                    ax2.axvline(vx + vz, color='orange', linestyle=':', label=f'vx+vz ({vx+vz:.4f})')
+                    ax2.axvspan(vx - vz - bw_debug/2, vx - vz + bw_debug/2, color='orange', alpha=0.1)
+                    ax2.axvspan(vx + vz - bw_debug/2, vx + vz + bw_debug/2, color='orange', alpha=0.1)
+            ax2.set_title(f"X-Tune & Sidebands Zoom")
+            ax2.set_xlabel("Frequency [MHz]")
+            ax2.grid(True, which='both', ls=':', alpha=0.5)
+            ax2.legend(fontsize=8, loc='upper right')
+
+            plt.suptitle(f"Debug Analysis (A={valA:.2e}, D={valD:.2e})", fontsize=14, fontweight='bold')
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            plt.savefig(debug_dir / f"check_A{valA:.2e}_D{valD:.2e}.png", dpi=250)
             plt.close()
 
         if vx == 0 or vz == 0:
-            return [valA / 10 ** -4, valD / 10 ** -4, 0.0, 0.0]
+            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, vx, vz, 0.0, 0.0]
 
-            
-        # vxn1 = vx-vz
-        # vxp1 = vx+vz
-        # bw = vz/3.
-        bw = 0.001
-
-        for i in range(len(freq)):
-            if  vx-vz -bw/2 < np.abs(freq[i]) < vx-vz+bw/2 or vx+vz-bw/2 < np.abs(freq[i]) < vx+vz+bw/2 :
-                fz[i] = 0
-                # pass
-            elif vz -bw/2 < np.abs(freq[i]) < vz + bw/2:
-                fx[i] = 0
-        try:
-            x = col_page(str(fpath), "x")
-            # xp = col_page(str(fpath), "xp") # Use fpath (absolute) not just filename
-            t = col_page(str(fpath), "dt") * c0
-            # p = col_page(str(fpath), "p")
-
+        # --- Filtering (User's Physics: X=Sidebands, Z=Main) ---
+        bw = 0.001 # User preference
         
-            freq = fftshift(fftfreq(len(x), T0)) / 10**6
-            fz = fftshift(fft(t.ravel()))
-            fx = fftshift(fft(x.ravel()))
+        # fx_filt: Extract ONLY the sidebands (ttt=2)
+        fx_filt = filtering_norm(freq, fft_x, vx, bw, 2, vz=vz)
+        
+        # fz_filt: Extract ONLY the main synchrotron peak (ttt=0)
+        fz_filt = filtering_norm(freq, fft_z, vz, bw, 0)
 
-            # Correct prominence/height to use absolute amplitude
-            amp_x = np.abs(fx)
-            h_threshold = np.max(amp_x) / 20.
-            peaks, _ = find_peaks(amp_x, prominence=h_threshold, height=h_threshold, distance=3)
+        filtered_x = np.real(ifftshift(ifft(fx_filt)))
+        filtered_z = np.real(ifftshift(ifft(fz_filt)))
 
-            cal_peak = []
-            for i in peaks:
-                if freq[i] > 0:
-                    cal_peak.append([freq[i], amp_x[i]])
-            cal_peak = np.array(cal_peak)
-
-            vxs, vzs = [], []
-            if len(cal_peak) > 0:
-                for k in range(len(cal_peak)):
-                    if 0.0 < cal_peak[k][0] < 0.1:
-                        vzs.append(cal_peak[k])
-                    elif cal_peak[k][0] > 1:
-                        vxs.append(cal_peak[k])
-            vxs = np.array(vxs)
-            vzs = np.array(vzs)
-
-            vx, vz = 0.0, 0.0
-            if len(vxs) > 0:
-                vx = vxs[vxs[:, 1].argsort()][-1, 0]
-            if len(vzs) > 0:
-                vz = vzs[vzs[:, 1].argsort()][-1, 0]
-
-            # --- Debug Plot for Peak Verification (Sample ~2%) ---
-            if (vx > 0 or vz > 0) and np.random.random() < 0.02:
-                debug_dir = OUT_DIR / "debug_peaks"
-                debug_dir.mkdir(parents=True, exist_ok=True)
-                plt.figure(figsize=(10, 6))
-                mask = freq > 0
-                plt.semilogy(freq[mask], amp_x[mask], label='X Spectrum', color='gray', alpha=0.6)
-                if vx > 0:
-                    plt.axvline(vx, color='r', linestyle='--', label=f'vx={vx:.4f} MHz')
-                if vz > 0:
-                    plt.axvline(vz, color='g', linestyle='--', label=f'vz={vz:.4f} MHz')
-                plt.title(f"Debug Peaks: A={valA:.2e}, D={valD:.2e}")
-                plt.xlabel("Frequency [MHz]")
-                plt.ylabel("Amplitude")
-                plt.legend()
-                plt.grid(True, which='both', ls=':', alpha=0.5)
-                plt.savefig(debug_dir / f"check_A{valA:.2e}_D{valD:.2e}.png", dpi=120)
-                plt.close()
-
-            if vx == 0 or vz == 0:
-                return [round(valA / 10 ** -4, 8), round(valD / 10 ** -4, 8), 0.0, 0.0]
-
-                
-            # vxn1 = vx-vz
-            # vxp1 = vx+vz
-            # bw = vz/3.
-            bw = 0.001
-
-            for i in range(len(freq)):
-                if  vx-vz -bw/2 < np.abs(freq[i]) < vx-vz+bw/2 or vx+vz-bw/2 < np.abs(freq[i]) < vx+vz+bw/2 :
-                    fz[i] = 0
-                    # pass
-                elif vz -bw/2 < np.abs(freq[i]) < vz + bw/2:
-                    fx[i] = 0
-                else:
-                    fx[i] = 0
-                    fz[i] = 0
-            
-            filtered_x = np.real(ifftshift(ifft(fx)))
-            filtered_z = np.real(ifftshift(ifft(fz)))
-            return [
-                round(valA / 10**-4, 8), 
-                round(valD / 10**-4, 8), 
-                np.max(np.abs(filtered_x)) / 10**-6, 
-                np.max(np.abs(filtered_z)) / 10**-6
-            ]
-        except Exception:
-            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0]
-    else:
-        # Log missing file
-        print(f"Missing: {fpath}")
-        return [0,0,0,0]
+        return [
+            round(valA / 10**-4, 8), 
+            round(valD / 10**-4, 8), 
+            np.max(np.abs(filtered_x)) / 10**-6, 
+            np.max(np.abs(filtered_z)) / 10**-6,
+            vx, 
+            vz,
+            vz_sb_left,
+            vz_sb_right
+        ]
+    except Exception as e:
+        # print(f"Error processing {fpath.name}: {e}")
+        return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 if __name__ == "__main__":
     if FDIR:
@@ -310,12 +306,12 @@ if __name__ == "__main__":
     delD_new = np.round(np.arange(scan_startD, scan_stopD, scan_stepD) / display_scale, 6)
     plotX, plotY = np.meshgrid(alpha_new, delD_new)
 
-    x_txt = FDIR / "X.txt"
-    z_txt = FDIR / "Z.txt"
+    x_csv = FDIR / "X.csv"
+    z_csv = FDIR / "Z.csv"
 
-    if x_txt.exists() and z_txt.exists():
-        X = np.loadtxt(x_txt, unpack=True).T
-        Z = np.loadtxt(z_txt, unpack=True).T
+    if x_csv.exists() and z_csv.exists():
+        X = pd.read_csv(x_csv, index_col=0).values
+        Z = pd.read_csv(z_csv, index_col=0).values
     else:
         new_value = []
         # Round the ranges to avoid floating point artifacts
@@ -326,37 +322,75 @@ if __name__ == "__main__":
                 new_value.append([FDIR, i, k])
 
         processes = os.cpu_count() or 1
+        # Windows limit for WaitForMultipleObjects is 64 handles. 
+        # Capping to 60 for safety on high-core-count machines.
+        if os.name == 'nt' and processes > 60:
+            processes = 60
+            
         if processes > 1:
-            print("multiprocessing works")
+            print(f"multiprocessing works (using {processes} cores)")
             mp_pool = __import__("multiprocessing").Pool(processes)
-            results = np.array(mp_pool.map(amp_cal, new_value))
+            
+            total_tasks = len(new_value)
+            completed = 0
+            results_list = []
+            
+            for res in mp_pool.imap(amp_cal, new_value):
+                results_list.append(res)
+                completed += 1
+                percent = (completed / total_tasks) * 100
+                import sys
+                sys.stdout.write(f"\rProcessing Progress: [{completed}/{total_tasks}] {percent:.1f}% ")
+                sys.stdout.flush()
+            
+            results = np.array(results_list)
             mp_pool.close()
             mp_pool.join()
+            print("\nProcessing complete.")
         else:
             results = np.array([amp_cal(new_value[i]) for i in range(len(new_value))])
 
-        results = results.reshape((-1, 4))
+        # Results shape is now (N, 8): [alpha, delta, X_amp, Z_amp, vx, vz, vz_sb_l, vz_sb_r]
+        results = results.reshape((-1, 8))
+
+        # 1. Save Amplitudes CSV
+        amp_df = pd.DataFrame(results[:, :4], columns=['alpha_c_1e4', 'delta_1e4', 'X_amp_um', 'Z_amp_um'])
+        amp_csv = FDIR / "scan_amplitudes.csv"
+        amp_df.to_csv(amp_csv, index=False)
+        print(f"Amplitudes saved to: {amp_csv}")
+
+        # 2. Save Tunes CSV
+        # Select columns 0, 1, 4, 5, 6, 7
+        tune_data = results[:, [0, 1, 4, 5, 6, 7]]
+        tune_df = pd.DataFrame(tune_data, columns=['alpha_c_1e4', 'delta_1e4', 'vx_MHz', 'vz_from_Z_MHz', 'vz_sb_minus_MHz', 'vz_sb_plus_MHz'])
+        tune_csv = FDIR / "scan_tunes.csv"
+        tune_df.to_csv(tune_csv, index=False)
+        print(f"Tunes saved to: {tune_csv}")
+
         Z = np.zeros((len(delD_new), len(alpha_new)))
         X = np.zeros((len(delD_new), len(alpha_new)))
 
-        for i in range(len(alpha_new)):
-            for k in range(len(delD_new)):
-                # Use a tolerance check or simpler matching since we rounded grid definition
-                # But to fully respect "find rounding point", we round the result values too
-                target_a = alpha_new[i]
-                target_d = delD_new[k]
-                
-                # Use np.isclose for robust float matching
-                for l in range(len(results)):
-                    if np.isclose(results[l][0], target_a, atol=1e-6) and \
-                       np.isclose(results[l][1], target_d, atol=1e-6):
-                        X[k][i] = results[l][2]
-                        Z[k][i] = results[l][3]
-                        break
+        # 1. Create a fast lookup dictionary (O(N))
+        result_map = {}
+        for res in results:
+            key = (round(res[0], 6), round(res[1], 6))
+            result_map[key] = (res[2], res[3])
+
+        # 2. Fill the grid using the lookup table
+        for i, a in enumerate(alpha_new):
+            for k, d in enumerate(delD_new):
+                match = result_map.get((round(a, 6), round(d, 6)))
+                if match:
+                    X[k][i] = match[0]
+                    Z[k][i] = match[1]
  # Found it, break inner loop
 
-        np.savetxt(x_txt, X)
-        np.savetxt(z_txt, Z)
+        # Save as Pandas DataFrame for labeled CSV
+        df_x = pd.DataFrame(X, index=delD_new, columns=alpha_new)
+        df_z = pd.DataFrame(Z, index=delD_new, columns=alpha_new)
+        
+        df_x.to_csv(x_csv)
+        df_z.to_csv(z_csv)
 
     # Plot Z contour
     fig, ax = plt.subplots(1, 1, figsize=(12, 9))

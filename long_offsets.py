@@ -53,7 +53,7 @@ class MachineParams:
         self.gam = self.E_0 / (0.511e6) + 1
 
         # Lattice / RF
-        self.beta_x = 10                  # m
+        self.beta_x = 7.08                  # m
         self.V_rf = 0.5e6                 # V
         self.f_rf = 500e6                 # Hz
         self.w_rf = 2 * np.pi * self.f_rf # rad/s
@@ -156,7 +156,7 @@ def ensure_output_dir(runfilename: str) -> Path:
 def main(runfilename: str = DEFAULT_RUNFILENAME):
     # Ranges
     alpha_range_contour = np.linspace(0.1e-4, 1e-4, 200)
-    delta_range_contour = np.linspace(1e-4, 2.2e-4, 200)
+    delta_range_contour = np.linspace(1e-4, 2.4e-4, 200)
     alpha_range_line = np.linspace(alpha_range_contour.min(), alpha_range_contour.max(), 200)
     delta_line_values = [1e-5]
 

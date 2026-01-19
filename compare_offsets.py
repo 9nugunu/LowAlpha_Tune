@@ -50,12 +50,12 @@ PLOT_CONFIG.apply_settings()
 
 DEFAULT_RUNFILENAME = "compare_offsets"
 RESULT_DIR = Path("input/results")
-X_PATH = RESULT_DIR / "X_ss.txt"
-Z_PATH = RESULT_DIR / "Z_ss.txt"
+X_PATH = RESULT_DIR / "X.txt"
+Z_PATH = RESULT_DIR / "Z.txt"
 
 # Grid definitions copied from result_elegant.py / plot_alpha_offset.py
-SCAN_START_D, SCAN_STOP_D, SCAN_STEP_D = 10 ** -4, 2.2 * 10 ** -4, 0.2 * 10 ** -5
-SCAN_START_A, SCAN_STOP_A, SCAN_STEP_A = 10 ** -5, 1.01 * 10 ** -4, 0.1 * 10 ** -5
+SCAN_START_D, SCAN_STOP_D, SCAN_STEP_D = 10 ** -4, 2.4 * 10 ** -4, 0.5 * 1e-5
+SCAN_START_A, SCAN_STOP_A, SCAN_STEP_A = 10 ** -5, 1.0 * 10 ** -4, 0.5 * 1e-6
 
 
 class MachineParams:
@@ -69,7 +69,7 @@ class MachineParams:
         self.gam = self.E_0 / (0.511e6) + 1
 
         # Lattice / RF
-        self.beta_x = 0.6428098                  # m
+        self.beta_x = 7.08
         self.V_rf = 0.5e6                 # V
         self.f_rf = 500e6                 # Hz
         self.w_rf = 2 * np.pi * self.f_rf # rad/s
@@ -99,7 +99,7 @@ def x_offset(alpha, delta, params=PARAMS):
     """Transverse offset from 00_long_x (uses Bessel J1)."""
     w_s = synchrotron_frequency(alpha, params)
     mu_s = w_s * params.T_0 / (2 * np.pi)
-    return np.sqrt(params.e_x * params.beta_x) * sp.j1(delta / mu_s) # (2*np.sqrt(2)) factor retained
+    return np.sqrt(params.e_x * params.beta_x) * sp.j1(delta / mu_s) / (2*np.sqrt(2)) # factor retained
 
 
 def z_offset(alpha, delta, params=PARAMS):
@@ -162,10 +162,10 @@ def plot_combined(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, delta_used
 
     style_axes(ax)
 
-    fig.suptitle(f"Offsets vs. alpha_c | target delta={delta_target:.1e}, sim slice ~{delta_used:.1e}")
+    fig.suptitle(f"Offsets vs. alpha_c | target delta={delta_target:.2e}, sim slice ~{delta_used:.1e}")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
-    out_path = out_dir / f"combined_offsets_delta{delta_target:.0e}.png"
+    out_path = out_dir / f"combined_offsets_delta{delta_target:.1e}.png"
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
     print(f"Saved combined plot to {out_path}")
@@ -174,7 +174,7 @@ def plot_combined(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, delta_used
 
 def main():
     parser = argparse.ArgumentParser(description="Compare theoretical and simulation offsets vs. alphac for a chosen delta.")
-    parser.add_argument("--delta", type=float, default=2e-4, help="Energy spread (delta) to use for theory curve and nearest simulation slice.")
+    parser.add_argument("--delta", type=float, default=2.2e-4, help="Energy spread (delta) to use for theory curve and nearest simulation slice.")
     parser.add_argument(
         "--runfilename",
         default=DEFAULT_RUNFILENAME,
