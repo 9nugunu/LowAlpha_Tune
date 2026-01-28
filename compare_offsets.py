@@ -51,7 +51,7 @@ class MachineParams:
         self.gam = self.E_0 / (0.511e6) + 1
 
         # Lattice / RF
-        self.beta_x = 1.8
+        self.beta_x = 7.08
         self.V_rf = 0.5e6                 # V
         self.f_rf = 500e6                 # Hz
         self.w_rf = 2 * np.pi * self.f_rf # rad/s

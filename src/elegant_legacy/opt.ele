@@ -13,10 +13,6 @@
 &rpn_load
 	filename = run0.twi
 	tag = ref
-&end
-&rpn_load
-	filename = run0.twi
-	tag = ref
 	load_parameters = 1
 &end
 
@@ -24,7 +20,6 @@
    filename=%s_before.twi,
    matched = 1,
    radiation_integrals = 1,
-   concat_order=3,
 &end
 
 &run_control
@@ -73,7 +68,6 @@
     use_beamline = RING,
     p_central_mev = 629,
     default_order = 3,
-    wrap_around = 0,
     rootname = <rootname>,
 &end
 
@@ -81,5 +75,4 @@
     filename = %s_final.twi,
     matched = 1,
     radiation_integrals = 1,
-    concat_order = 3,
 &end

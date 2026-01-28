@@ -1,0 +1,30 @@
+Printout for SDDS file output/scan_alphac_pyele/scan_A1.00e-05-1.00e-04_D1.00e-04-1.00e-03/opt_A1.00e-05_D1.00e-04_final.twi
+
+Step =                              0  SVNVersion =                    34285  nux (1/(2$gp$r)) =       3.181603e+00
+dnux/dp (1/(2$gp$r)) =   1.038535e+00  dnux/dp2 (1/(2$gp$r)) =  0.000000e+00  dnux/dp3 (1/(2$gp$r)) =  0.000000e+00
+Ax (m) =                 8.192809e+00  AxLocation (m) =         1.525000e+01  AxElementName =                   DQQ
+nuy (1/(2$gp$r)) =       2.226832e+00  dnuy/dp (1/(2$gp$r)) =   7.375667e-01  dnuy/dp2 (1/(2$gp$r)) =  0.000000e+00
+dnuy/dp3 (1/(2$gp$r)) =  0.000000e+00  Ay (m) =                 6.478281e+00  AyLocation (m) =         3.177500e+01
+AyElementName =                  BEND  deltaHalfRange =         0.000000e+00  nuxChromUpper =          3.181603e+00
+nuxChromLower =          3.181603e+00  nuyChromUpper =          2.226832e+00  nuyChromLower =          2.226832e+00
+Stage =              tunes uncorrected  pCentral (m$be$nc) =     1.230922e+03  dbetax/dp (m) =          3.665379e+00
+dbetay/dp (m) =          1.063545e+01  dalphax/dp =            -1.347160e+01  dalphay/dp =            -2.163183e+01
+etax2 (m) =             -2.411463e+00  etay2 (m) =              0.000000e+00  etax3 (m) =             -2.288453e+02
+etay3 (m) =              0.000000e+00  etaxp2 (m) =             7.544184e-01  etayp2 (m) =             0.000000e+00
+etaxp3 (m) =             5.374405e+01  etayp3 (m) =             0.000000e+00  betaxMin (m) =           6.337781e-01
+betaxAve (m) =           5.421566e+00  betaxMax (m) =           1.220583e+01  betayMin (m) =           1.172548e+00
+betayAve (m) =           5.528033e+00  betayMax (m) =           1.543619e+01  etaxMax (m) =            1.875783e+00
+etayMax (m) =            0.000000e+00  waistsx =                          24  waistsy =                          16
+dnux/dAx (1/m) =         0.000000e+00  dnux/dAy (1/m) =         0.000000e+00  dnuy/dAx (1/m) =         0.000000e+00
+dnuy/dAy (1/m) =         0.000000e+00  dnux/dAx2 (1/m$a2$n) =   0.000000e+00  dnux/dAy2 (1/m$a2$n) =   0.000000e+00
+dnux/dAxAy (1/m$a2$n) =  0.000000e+00  dnuy/dAx2 (1/m$a2$n) =   0.000000e+00  dnuy/dAy2 (1/m$a2$n) =   0.000000e+00
+dnuy/dAxAy (1/m$a2$n) =  0.000000e+00  nuxTswaLower =           0.000000e+00  nuxTswaUpper =           0.000000e+00
+nuyTswaLower =           0.000000e+00  nuyTswaUpper =           0.000000e+00  couplingIntegral =       0.000000e+00
+couplingDelta =         -4.522858e-02  emittanceRatio =         0.000000e+00  alphac3 =               -9.796098e+00
+alphac2 =                6.147999e-02  alphac =                 9.964000e-06  I1 (m) =                 4.782720e-04
+I2 (1/m) =               4.112335e+00  I3 (1/m$a2$n) =          2.691517e+00  I4 (1/m) =              -2.252991e-01
+I5 (1/m) =               1.476890e+00  ex0 ($gp$rm) =           1.976857e-07  enx0 (m$be$nc $gp$rm) =  2.433358e-04
+taux (s) =               2.107002e-02  Jx =                     1.054786e+00  tauy (s) =               2.222436e-02
+Jy =                     1.000000e+00  Sdelta0 =                4.419882e-04  taudelta (s) =           1.142515e-02
+Jdelta =                 1.945214e+00  U0 (MeV) =               9.063000e-03
+

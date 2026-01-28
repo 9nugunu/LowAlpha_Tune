@@ -7,6 +7,7 @@ import shutil
 import json
 import argparse
 import time
+import sys
 
 
 def get_args():
@@ -60,7 +61,7 @@ SCAN_STOP_D = args.stopD
 SCAN_STEP_D = args.stepD
 
 # parallel workers for sweep (adjust as needed)
-MAX_WORKERS = os.cpu_count() or 4
+MAX_WORKERS = os.cpu_count() - 4 or 4
 TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
 
@@ -107,11 +108,19 @@ def sweep_optics(work_dir: Path) -> list[str]:
     print(f"Starting sweep: {len(tasks)} jobs total.")
 
     results: dict[str, bool] = {}
+    total_tasks = len(tasks)
+    completed = 0
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {executor.submit(run_opt_task, a, d, work_dir): (a, d) for a, d in tasks}
         for future in concurrent.futures.as_completed(futures):
             rootname, success = future.result()
             results[rootname] = success
+            completed += 1
+            percent = (completed / total_tasks) * 100
+            sys.stdout.write(f"\rOptimization Progress: [{completed}/{total_tasks}] {percent:.1f}% ")
+            sys.stdout.flush()
+    print() # New line after progress
 
     success_roots = [r for r, s in results.items() if s]
     failed_roots = [r for r, s in results.items() if not s]
@@ -169,11 +178,19 @@ def run_checks(rootnames: list[str], work_dir: Path) -> None:
     print(f"Starting parallel checks for {len(rootnames)} results...")
     
     results: dict[str, bool] = {}
+    total_checks = len(rootnames)
+    completed = 0
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {executor.submit(run_single_check, r, work_dir): r for r in rootnames}
         for future in concurrent.futures.as_completed(futures):
             rootname = futures[future]
             results[rootname] = future.result()
+            completed += 1
+            percent = (completed / total_checks) * 100
+            sys.stdout.write(f"\rCheck Progress: [{completed}/{total_checks}] {percent:.1f}% ")
+            sys.stdout.flush()
+    print() # New line after progress
 
     success_count = sum(1 for s in results.values() if s)
     failed_list = [r for r, s in results.items() if not s]

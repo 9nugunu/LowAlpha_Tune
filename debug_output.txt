@@ -1,0 +1,23 @@
+--- Running 5 Test Scan Points ---
+
+--- Verifying Results in scan_A1.00e-05-5.00e-05_D1.00e-05-1.00e-05 ---
+Filename                                 | Target APVAL    | Actual alphac   | Diff      
+------------------------------------------------------------------------------------------
+opt_A1.00e-05_D1.00e-05_final.twi        | 1.00e-05        | 9.96e-06        | -3.60e-08 
+opt_A2.00e-05_D1.00e-05_final.twi        | 2.00e-05        | 1.99e-05        | -6.61e-08 
+opt_A3.00e-05_D1.00e-05_final.twi        | 3.00e-05        | 3.00e-05        | -3.87e-08 
+opt_A4.00e-05_D1.00e-05_final.twi        | 4.00e-05        | 3.99e-05        | -8.95e-08 
+opt_A5.00e-05_D1.00e-05_final.twi        | 5.00e-05        | 5.00e-05        | -3.61e-08 
+
+--- Verifying Physics (Energy Offset & Beta Functions) ---
+Direct Parameter Access (opt_A1.00e-05_D1.00e-05_check.param):
+  - Total elements in param file: 3399
+  - First 5 elements: ['MAL', 'MAL', 'MAL', 'MAL', 'MAL']
+  [!] Applied DELTA in MAL element: 1.000000e-05
+Particle Analysis Result:
+  - Mean P:    1231.006328
+  - Actual DP: 6.8484e-05
+
+Element         | betax [m]    | betay [m]   
+---------------------------------------------
+WISLAND         | 7.0825       | 1.8391      
