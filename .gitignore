@@ -1,11 +1,9 @@
-/output/
+/data/
+/Archieves/
+/scan_elegant/results/
+/scan_elegant/.vscode/
 /output/scan_alphac_pyele/
-/output/process_scan_results/
-debug_output.txt
-debug_output_all.txt
-/input/MLS_tune_elegant/test/
 *.txt
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
