@@ -12,8 +12,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.special as sp
 
+import os
+import sys
+
 # Non-interactive backend for headless runs.
 plt.switch_backend("Agg")
+
+# Add src to path for config
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+from src.config import *
 
 
 @dataclass
@@ -48,14 +55,15 @@ class PlotConfig:
 PLOT_CONFIG = PlotConfig()
 PLOT_CONFIG.apply_settings()
 
-DEFAULT_RUNFILENAME = "compare_offsets"
-RESULT_DIR = Path("input/results")
-X_PATH = RESULT_DIR / "X.txt"
-Z_PATH = RESULT_DIR / "Z.txt"
+DEFAULT_RUNFILENAME = "compare_powers"
+# Grid definitions will be auto-loaded from metadata if possible,
+# but for simplicity we'll try to extract them from the csv indices later or assume the previous scan range.
+# Let's use the ones already in the file but update paths to the new config.
+X_PATH = LATEST_SCAN_DIR / "X.csv"
+Z_PATH = LATEST_SCAN_DIR / "Z.csv"
 
-# Grid definitions copied from result_elegant.py / plot_alpha_offset.py
-SCAN_START_D, SCAN_STOP_D, SCAN_STEP_D = 10 ** -4, 2.4 * 10 ** -4, 0.5 * 1e-5
-SCAN_START_A, SCAN_STOP_A, SCAN_STEP_A = 10 ** -5, 1.0 * 10 ** -4, 0.5 * 1e-6
+# Grid definitions: These should ideally match the simulation grid.
+# We'll try to read them from the CSV if index_col=0 is used.
 
 
 class MachineParams:
@@ -65,11 +73,11 @@ class MachineParams:
         self.c = 299792458                 # m/s
         self.E_0 = 629e6                  # eV
         self.U_0 = 9.1e3                  # eV
-        self.T_0 = 48 / self.c            # s
+        self.T_0 = T_REV                  # Use config REV period
         self.gam = self.E_0 / (0.511e6) + 1
 
         # Lattice / RF
-        self.beta_x = 7.08
+        self.beta_x = 1.8
         self.V_rf = 0.5e6                 # V
         self.f_rf = 500e6                 # Hz
         self.w_rf = 2 * np.pi * self.f_rf # rad/s
@@ -99,13 +107,24 @@ def x_offset(alpha, delta, params=PARAMS):
     """Transverse offset from 00_long_x (uses Bessel J1)."""
     w_s = synchrotron_frequency(alpha, params)
     mu_s = w_s * params.T_0 / (2 * np.pi)
-    return np.sqrt(params.e_x * params.beta_x) * sp.j1(delta / mu_s) / (2*np.sqrt(2)) # factor retained
+    return np.sqrt(params.e_x * params.beta_x) * sp.j1(delta / mu_s) #/ (2*np.sqrt(2)) # factor retained
 
 
 def z_offset(alpha, delta, params=PARAMS):
     """Longitudinal offset from 00_long_z."""
     w_s = synchrotron_frequency(alpha, params)
     return (alpha - 1 / params.gam**2) * params.c / w_s * delta
+
+def offset_to_power(offset_um):
+    """Convert offset in micrometers to Power in dBm using config parameters."""
+    # V_peak (mV) = S (mV/mm/nC) * x (mm) * Q (nC)
+    v_peak_mv = POS_SENSITIVITY * (offset_um / 1000.0) * BUNCH_CHARGE_NC
+    # P_mW = (V_peak/1000)^2 / (2 * R) * 1000
+    p_mw = ((v_peak_mv / 1000.0)**2) / (2 * IMPEDANCE) * 1000.0
+    # Avoid log of zero
+    with np.errstate(divide='ignore'):
+        p_dbm = 10 * np.log10(p_mw)
+    return p_dbm
 
 
 def ensure_output_dir(runfilename: str) -> Path:
@@ -115,21 +134,20 @@ def ensure_output_dir(runfilename: str) -> Path:
 
 
 def load_simulation_slice(delta_target: float):
+    import pandas as pd
     if not X_PATH.exists() or not Z_PATH.exists():
         raise SystemExit(f"Missing simulation data: {X_PATH} or {Z_PATH}")
 
-    alpha_grid = np.arange(SCAN_START_A, SCAN_STOP_A, SCAN_STEP_A)  # absolute alpha values
-    alpha_axis = alpha_grid / 1e-4  # normalized for plotting
-    delta_grid = np.arange(SCAN_START_D, SCAN_STOP_D, SCAN_STEP_D)
-    delta_norm = delta_grid / 1e-4
+    X_df = pd.read_csv(X_PATH, index_col=0)
+    Z_df = pd.read_csv(Z_PATH, index_col=0)
+    
+    alpha_axis = np.array(X_df.columns, dtype=float)
+    alpha_grid = alpha_axis * 1e-4
+    delta_norm = np.array(X_df.index, dtype=float)
+    delta_grid = delta_norm * 1e-4
 
-    X = np.loadtxt(X_PATH)
-    Z = np.loadtxt(Z_PATH)
-
-    if X.shape != (len(delta_grid), len(alpha_grid)) or Z.shape != (len(delta_grid), len(alpha_grid)):
-        raise SystemExit(
-            f"Unexpected X/Z shape {X.shape} / {Z.shape}; expected {(len(delta_grid), len(alpha_grid))}"
-        )
+    X = X_df.values
+    Z = Z_df.values
 
     delta_target_norm = delta_target / 1e-4
     idx = int(np.argmin(np.abs(delta_norm - delta_target_norm)))
@@ -146,29 +164,38 @@ def theoretical_offsets_um(alpha_grid: np.ndarray, delta: float):
     return x_um, z_um
 
 
-def plot_combined(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, delta_used, out_dir: Path):
-    fig, ax = plt.subplots(2, 1, figsize=(9, 10), sharex=True)
+def plot_combined_powers(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, delta_used, out_dir: Path):
+    fig, ax = plt.subplots(figsize=(12, 8))
 
-    ax[0].plot(alpha_axis, th_x, color="tab:red", label=f"Theory (delta={delta_target:.1e})")
-    ax[0].plot(alpha_axis, sim_x, color="k", linestyle="--", marker="o", markersize=4, label=f"Simulation (delta~{delta_used:.1e})")
-    ax[0].set_ylabel(r"x offset ($\mu$m)")
-    ax[0].legend()
+    # Convert um to dBm
+    sim_x_dbm = offset_to_power(sim_x)
+    th_x_dbm = offset_to_power(th_x)
+    sim_z_dbm = offset_to_power(sim_z)
+    th_z_dbm = offset_to_power(th_z)
 
-    ax[1].plot(alpha_axis, th_z, color="tab:blue", label=f"Theory (delta={delta_target:.1e})")
-    ax[1].plot(alpha_axis, sim_z, color="k", linestyle="--", marker="s", markersize=4, label=f"Simulation (delta~{delta_used:.1e})")
-    ax[1].set_xlabel(r"momentum compaction $\alpha_c \times 10^{-4}$")
-    ax[1].set_ylabel(r"z offset ($\mu$m)")
-    ax[1].legend()
+    # Plot X curves (Red theme)
+    ax.plot(alpha_axis, th_x_dbm, color="tab:red", linewidth=2.5, label=f"X Theory")
+    ax.plot(alpha_axis, sim_x_dbm, color="tab:red", linestyle="--", marker="o", markersize=6, alpha=0.7, label=f"X Sim")
 
+    # Plot Z curves (Blue theme)
+    ax.plot(alpha_axis, th_z_dbm, color="tab:blue", linewidth=2.5, label=f"Z Theory")
+    ax.plot(alpha_axis, sim_z_dbm, color="tab:blue", linestyle="--", marker="s", markersize=6, alpha=0.7, label=f"Z Sim")
+
+    # Overlay Noise Floor
+    ax.axhline(y=ASSUMED_NOISE_FLOOR, color='black', linestyle=':', linewidth=1.5, label=f'Hardware Noise Floor ({ASSUMED_NOISE_FLOOR} dBm)')
+
+    ax.set_xlabel(r"momentum compaction $\alpha_c \times 10^{-4}$", fontsize=16, fontweight='bold')
+    ax.set_ylabel(r"Signal Power (dBm)", fontsize=16, fontweight='bold')
+    ax.set_title(f"Comparison of X/Z Signal Power\n(delta={delta_target:.2e}, beam={BEAM_CURRENT}uA)", fontsize=18, fontweight='bold')
+    
     style_axes(ax)
+    ax.legend(loc='upper right', fontsize=12, frameon=True, shadow=True)
 
-    fig.suptitle(f"Offsets vs. alpha_c | target delta={delta_target:.2e}, sim slice ~{delta_used:.1e}")
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
-
-    out_path = out_dir / f"combined_offsets_delta{delta_target:.1e}.png"
+    plt.tight_layout()
+    out_path = out_dir / f"overlay_powers_delta{delta_target:.1e}.png"
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
-    print(f"Saved combined plot to {out_path}")
+    print(f"Saved overlay power plot to {out_path}")
     return out_path
 
 
@@ -187,7 +214,7 @@ def main():
     alpha_grid, alpha_axis, sim_x, sim_z, delta_used = load_simulation_slice(args.delta)
     th_x, th_z = theoretical_offsets_um(alpha_grid, args.delta)
 
-    plot_combined(alpha_axis, sim_x, sim_z, th_x, th_z, args.delta, delta_used, out_dir)
+    plot_combined_powers(alpha_axis, sim_x, sim_z, th_x, th_z, args.delta, delta_used, out_dir)
 
 
 if __name__ == "__main__":
