@@ -15,14 +15,12 @@ import re
 from scipy.fftpack import fft, fftshift, fftfreq, ifft, ifftshift
 from scipy.signal import find_peaks
 import pandas as pd
+from visualization import PlotConfig
 
 # Plot style
 plt.switch_backend("Agg")
-plt.rcParams["axes.labelsize"] = 24
-plt.rcParams["axes.labelweight"] = "bold"
-plt.rcParams["font.weight"] = "bold"
-plt.rcParams["font.size"] = 20
-plt.rcParams["image.cmap"] = "jet"
+config = PlotConfig(cmap='jet', font_size=20)
+config.apply_settings()
 
 c0 = 299792458
 T0 = 48 / c0
@@ -251,7 +249,7 @@ def amp_cal(p):
             plt.close()
 
         if vx == 0 or vz == 0:
-            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, vx, vz, 0.0, 0.0]
+            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, vx, vz, 0.0, 0.0, 0.0, 0.0]
 
         # --- Filtering (User's Physics: X=Sidebands, Z=Main) ---
         bw = 0.001 # User preference
@@ -265,6 +263,34 @@ def amp_cal(p):
         filtered_x = np.real(ifftshift(ifft(fx_filt)))
         filtered_z = np.real(ifftshift(ifft(fz_filt)))
 
+        # --- Noise Floor Calculation (Median of Spectrum) ---
+        # Normalize to same units as amplitude (micrometers)
+        # fft_x is raw FFT, need to scale same as max peak extraction?
+        # The max extraction used: np.max(np.abs(filtered_x)) / 10**-6
+        # filtered_x is IFFT(filtered), which is reconstruction.
+        # Ideally noise floor should be estimated from the noise region of spectrum.
+        # But median of spectrum is a robust proxy.
+        # Note: fft_x was calculated but not normalized by N properly in plotting? 
+        # Actually amp_cal returns time-domain max amplitude.
+        # Let's use the median of the TIME DOMAIN residual signal if we want 'noise amplitude'?
+        # Or median of Frequency domain?
+        # User request: "noise analysis of beam signal measurement interval" -> "baseline"
+        # Let's take the median of the FFT magnitude spectrum as the noise floor reference.
+        # We need to ensure the unit scaling matches X_amp.
+        # X_amp comes from IFFT of filtered spectrum.
+        # If we take median of Spectrum, we are in Frequency domain.
+        # Let's return the median of the abs(FFT) scaled to same arbitrary unit, 
+        # OR better: Noise amplitude in time domain (unfiltered - filtered)?
+        # Let's stick to median of Spectrum for "Baseline Noise Level" concept.
+        # We need to check scaling factor `scale` used in `filtering_norm` or `fft`.
+        # In this script, standard fft is used.
+        # For consistency with X_amp (which is um), let's estimate noise in um equivalent?
+        # Simple approach: Noise = Median(abs(fft)) * 2 (for single sided) / N ?
+        # Actually simplest is to return the median value of the computed FFT `fft_x`, 
+        # assuming `fft_x` scaling is consistent with signal peaks.
+        noise_x = np.median(np.abs(fft_x))
+        noise_z = np.median(np.abs(fft_z))
+
         return [
             round(valA / 10**-4, 8), 
             round(valD / 10**-4, 8), 
@@ -273,11 +299,13 @@ def amp_cal(p):
             vx, 
             vz,
             vz_sb_left,
-            vz_sb_right
+            vz_sb_right,
+            noise_x,
+            noise_z
         ]
     except Exception as e:
         # print(f"Error processing {fpath.name}: {e}")
-        return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 if __name__ == "__main__":
     if FDIR:
@@ -350,11 +378,12 @@ if __name__ == "__main__":
         else:
             results = np.array([amp_cal(new_value[i]) for i in range(len(new_value))])
 
-        # Results shape is now (N, 8): [alpha, delta, X_amp, Z_amp, vx, vz, vz_sb_l, vz_sb_r]
-        results = results.reshape((-1, 8))
+        # Results shape is now (N, 10): [alpha, delta, X_amp, Z_amp, vx, vz, vz_sb_l, vz_sb_r, nx, nz]
+        results = results.reshape((-1, 10))
 
         # 1. Save Amplitudes CSV
-        amp_df = pd.DataFrame(results[:, :4], columns=['alpha_c_1e4', 'delta_1e4', 'X_amp_um', 'Z_amp_um'])
+        # Include noise columns
+        amp_df = pd.DataFrame(results[:, [0, 1, 2, 3, 8, 9]], columns=['alpha_c_1e4', 'delta_1e4', 'X_amp_um', 'Z_amp_um', 'Noise_X_raw', 'Noise_Z_raw'])
         amp_csv = FDIR / "scan_amplitudes.csv"
         amp_df.to_csv(amp_csv, index=False)
         print(f"Amplitudes saved to: {amp_csv}")
@@ -427,4 +456,44 @@ if __name__ == "__main__":
     cbar = fig.colorbar(cf1, ax=axes, fraction=0.046, pad=0.04)
     cbar.set_label(r"offset ($\mu$m)")
     fig.savefig(OUT_DIR / "XZ_offset_contour_side_by_side.png", dpi=300)
-    plt.show()
+
+    # --- New: Plot Difference (X - Z) ---
+    diff = X - Z
+    max_abs = max(abs(diff.min()), abs(diff.max())) # For symmetric color scale
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12, 9))
+    # 'seismic' provides very high contrast between blue (negative) and red (positive)
+    cp = ax.contourf(plotX, plotY, diff, levels=100, cmap='seismic', vmin=-max_abs, vmax=max_abs)
+
+    # --- Highlight zero difference (X = Z) ---
+    zero_contour = ax.contour(plotX, plotY, diff, levels=[0.0], colors='magenta', linewidths=2.5)
+    
+    # Place labels at specific coordinates to widen the interval
+    # We pick points where diff is near 0
+    zi = np.where(np.abs(diff) < np.nanpercentile(np.abs(diff), 2))
+    if len(zi[0]) > 20:
+        # Pick two points (roughly 1/4 and 3/4 along the detected indices)
+        p1_idx = len(zi[0]) // 14
+        p2_idx = (8 * len(zi[0])) // 10
+        label_locs = [
+            (plotX[zi[0][p1_idx], zi[1][p1_idx]], plotY[zi[0][p1_idx], zi[1][p1_idx]]),
+            (plotX[zi[0][p2_idx], zi[1][p2_idx]], plotY[zi[0][p2_idx], zi[1][p2_idx]])
+        ]
+        texts = ax.clabel(zero_contour, inline=True, fontsize=18, fmt={0.0: '0'}, manual=label_locs)
+        for t in texts:
+            t.set_rotation(0)
+    else:
+        texts = ax.clabel(zero_contour, inline=True, fontsize=18, fmt={0.0: '0'})
+        for t in texts:
+            t.set_rotation(0)
+    
+    cbar = fig.colorbar(cp)
+    cbar.set_label(r"$\Delta x-\Delta z$ ($\mu$m)", rotation=270, labelpad=20)
+    ax.set_title("Comparison of X and Z amplitudes")
+    ax.set_xlabel(r"$\alpha_c \times 10^{-4}$")
+    ax.set_ylabel(r"$\delta \times 10^{-4}$")
+    plt.tight_layout()
+    fig.savefig(OUT_DIR / "XZ_diff_contour.png", dpi=300)
+    print(f"Difference map saved to: {OUT_DIR / 'XZ_diff_contour.png'}")
+
+    # plt.show()

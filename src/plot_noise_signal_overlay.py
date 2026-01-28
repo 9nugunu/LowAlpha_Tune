@@ -9,42 +9,59 @@ import os
 # Add src to path for config
 sys.path.append(os.path.dirname(__file__))
 from config import *
+from visualization import PlotConfig
 
 # --- Matplotlib High-Visibility Settings ---
-plt.rcParams['font.weight'] = 'bold'
-plt.rcParams['axes.labelsize'] = 14
-plt.rcParams['axes.labelweight'] = 'bold'
-plt.rcParams['lines.linewidth'] = 2
-# plt.rcParams['xtick.major.width'] = 2
-# plt.rcParams['ytick.major.width'] = 2
-plt.rcParams['xtick.labelsize'] = 12
-plt.rcParams['ytick.labelsize'] = 12
+PlotConfig(label_size=14, font_size=12, line_width=2).apply_settings()
 plt.rcParams['grid.alpha'] = 0.3
 
 # --- 1. Load Hardware Noise Data (from noise_fsp logic) ---
 INPUT_DIR = BASE_DIR / "input" / "Noise_file"
-freq_noise = []
-amp_noise_sum = []
-count_noise = 0
+all_noise_dbm_hz = []
+freq_noise = None
+
+def get_signal_level(i):
+    """Try to extract 'Signal Level' from the raw analyzer file named 'i'."""
+    raw_path = INPUT_DIR / str(i)
+    if raw_path.exists():
+        try:
+            with open(raw_path, 'r', encoding='UTF-8') as f:
+                for line in f:
+                    if "Signal Level;" in line:
+                        parts = line.split(";")
+                        if len(parts) >= 2:
+                            return float(parts[1])
+        except Exception as e:
+            print(f"Warning: Could not parse signal level from {raw_path}: {e}")
+    # Default return if not found or error
+    return -20.0
 
 for i in range(5):
     fpath = INPUT_DIR / f"Noise_{i}.csv"
     if fpath.exists():
+        pc = get_signal_level(i)
+        print(f"Loading Noise_{i}.csv with Carrier Power = {pc:.2f} dBm")
         with open(fpath, 'r', encoding='UTF-8') as f:
             reader = csv.DictReader(f)
             freqs, vals = [], []
             for row in reader:
                 freqs.append(float(row['Hz'])) # Hz
-                vals.append(float(row['dBc/Hz']))
-            if count_noise == 0:
+                vals.append(float(row['dBc/Hz']) + pc) # Absolute dBm/Hz
+            
+            if freq_noise is None:
                 freq_noise = np.array(freqs)
-                amp_noise_sum = np.zeros_like(freq_noise)
-            amp_noise_sum += np.array(vals)
-            count_noise += 1
+            
+            # Ensure same length if data varies slightly
+            if len(vals) == len(freq_noise):
+                all_noise_dbm_hz.append(vals)
 
-avg_noise_floor = amp_noise_sum / count_noise if count_noise > 0 else []
-# Convert dBc/Hz to dBm/Hz assuming Carrier = 0 dBm
-noise_dbm_hz = avg_noise_floor + 0.0 
+all_noise_dbm_hz = np.array(all_noise_dbm_hz)
+if all_noise_dbm_hz.size > 0:
+    mean_noise_dbm_hz = np.mean(all_noise_dbm_hz, axis=0)
+    std_noise_dbm_hz = np.std(all_noise_dbm_hz, axis=0)
+else:
+    mean_noise_dbm_hz = []
+    std_noise_dbm_hz = []
 
 import argparse
 
@@ -80,8 +97,12 @@ except Exception as e:
 # --- 3. Plotting ---
 plt.figure(figsize=(12, 7))
 
-# A. Plot Noise Floor (Continuous)
-plt.semilogx(freq_noise / 1000.0, noise_dbm_hz, color='blue', alpha=0.6, label='Hardware Noise Floor')
+# A. Plot Noise Floor (Mean + Standard Deviation shading)
+plt.semilogx(freq_noise / 1000.0, mean_noise_dbm_hz, color='blue', alpha=0.9, linewidth=1.5, label='Noise')
+plt.fill_between(freq_noise / 1000.0, 
+                 mean_noise_dbm_hz - std_noise_dbm_hz, 
+                 mean_noise_dbm_hz + std_noise_dbm_hz, 
+                 color='blue', alpha=0.15)
 
 # B. Plot Signal Peaks for each Delta
 import matplotlib.colors as mcolors
@@ -120,16 +141,16 @@ for i, d in enumerate(target_deltas):
 
 # C. Decorations
 cbar = plt.colorbar(sc, ticks=np.linspace(df['alpha_c_1e4'].min(), df['alpha_c_1e4'].max(), 10))
-cbar.set_label(r'Momentum Compaction $\alpha_c$ [$10^{-4}$]', fontweight='bold')
+cbar.set_label(r'$\alpha_c$ [$\times 10^{-4}$]', rotation=270, labelpad=20)
 
-plt.xlabel('Frequency [kHz]', fontsize=14)
-plt.ylabel('Power [dBm or dBm/Hz]', fontsize=14)
-plt.title(f'Multi-Delta Overlay: Noise vs Synchrotron Signal Peaks (Z)\n(Current={BEAM_CURRENT}uA)', fontsize=15)
+plt.xlabel('Frequency [kHz]')
+plt.ylabel('Power [dBm]')
+plt.title(fr'Phase noise w/ BPM amplitude w.r.t $\alpha_c$ (Current={BEAM_CURRENT}uA)')
 
 plt.xlim(0.01, 100)
-plt.ylim(-110, -60)
+# plt.ylim(-110, -60)
 plt.grid(True, which='both', linestyle=':', alpha=0.4)
-plt.legend(loc='upper right', frameon=True, shadow=True, fontsize=10)
+plt.legend(loc='upper left', frameon=True, shadow=True)
 
 # Save result
 deltas_str = "_".join([f"{d:.1f}" for d in target_deltas])
@@ -137,4 +158,4 @@ output_path = LATEST_SCAN_DIR / f"Noise_ZSignal_Overlay_MultiDelta.png"
 plt.tight_layout()
 plt.savefig(output_path, dpi=300)
 print(f"Multi-delta overlay plot saved to: {output_path}")
-plt.show()
+# plt.show()

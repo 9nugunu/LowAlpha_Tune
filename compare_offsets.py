@@ -23,33 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from src.config import *
 
 
-@dataclass
-class PlotConfig:
-    """Plot style configuration."""
-    label_size: int = 24
-    label_weight: str = "bold"
-    font_weight: str = "bold"
-    font_size: int = 24
-    cmap: str = "turbo"
-    title_size: int = 28
-    title_weight: str = "bold"
-    legend_fontsize: int = 14
-    line_width: int = 3
-    marker_size: int = 8
-    zero_transparent: bool = True  # Whether to treat zeros as transparent
-
-    def apply_settings(self):
-        """Apply settings to matplotlib."""
-        plt.rcParams["axes.labelsize"] = self.label_size
-        plt.rcParams["axes.labelweight"] = self.label_weight
-        plt.rcParams["font.weight"] = self.font_weight
-        plt.rcParams["font.size"] = self.font_size
-        plt.rcParams["image.cmap"] = self.cmap
-        plt.rcParams["axes.titlesize"] = self.title_size
-        plt.rcParams["axes.titleweight"] = self.title_weight
-        plt.rcParams["legend.fontsize"] = self.legend_fontsize
-        plt.rcParams["lines.linewidth"] = self.line_width
-        plt.rcParams["lines.markersize"] = self.marker_size
+from src.visualization import PlotConfig
 
 
 PLOT_CONFIG = PlotConfig()
@@ -86,7 +60,7 @@ class MachineParams:
         # Derived
         self.phi_s = np.pi - np.arcsin(self.U_0 / self.V_rf)
 
-
+ 
 PARAMS = MachineParams()
 
 
@@ -199,6 +173,40 @@ def plot_combined_powers(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, del
     return out_path
 
 
+    print(synchrotron_frequency(50e3))
+
+
+def calculate_alpha_from_fs(fs_Hz):
+    """
+    Inverse calculation of alpha_c from synchrotron frequency fs using MachineParams.
+    Formula: alpha_c = (fs / f_rev)**2 * (2*pi*E_beam) / (h * V_rf * cos(phi_s))
+    """
+    # Use globally defined PARAMS
+    T_rev = PARAMS.T_0
+    f_rev = 1.0 / T_rev
+    E_beam = PARAMS.E_0
+    V_rf = PARAMS.V_rf
+    
+    # Calculate Harmonic Number h = f_rf / f_rev
+    h = PARAMS.f_rf / f_rev
+    
+    # Use derived synchronous phase phi_s
+    # Note: PARAMS.phi_s is calculated as pi - arcsin(U0/Vrf)
+    # Cosine term usually takes the absolute value or accounts for the specific bucket
+    cos_phi = np.abs(np.cos(PARAMS.phi_s))
+    
+    numerator = 2 * np.pi * E_beam
+    denominator = h * V_rf * cos_phi
+    
+    # alpha_c calculation
+    alpha = (fs_Hz / f_rev)**2 * (numerator / denominator)
+    
+    # Debug info for verification
+    print(f"\n[Params Used] E={E_beam/1e6:.1f}MeV, V_rf={V_rf/1e3:.1f}kV, h={h:.1f}, f_rev={f_rev/1e6:.3f}MHz")
+    
+    return alpha
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compare theoretical and simulation offsets vs. alphac for a chosen delta.")
     parser.add_argument("--delta", type=float, default=2.2e-4, help="Energy spread (delta) to use for theory curve and nearest simulation slice.")
@@ -207,6 +215,9 @@ def main():
         default=DEFAULT_RUNFILENAME,
         help="Folder name under output/ where plots will be saved.",
     )
+    # Add argument for calculating alpha from measured fs
+    parser.add_argument("--measured_fs", type=float, default=None, help="Measured synchrotron frequency (Hz) to calc alpha")
+    
     args = parser.parse_args()
 
     out_dir = ensure_output_dir(args.runfilename)
@@ -215,6 +226,15 @@ def main():
     th_x, th_z = theoretical_offsets_um(alpha_grid, args.delta)
 
     plot_combined_powers(alpha_axis, sim_x, sim_z, th_x, th_z, args.delta, delta_used, out_dir)
+    
+    if args.measured_fs is not None:
+        alpha_calc = calculate_alpha_from_fs(args.measured_fs)
+        print(f"\n[Inverse Calculation]")
+        print(f"Measured fs: {args.measured_fs/1000.:.3f} kHz")
+        print(f"Calculated Alpha_c: {alpha_calc:.3e}")
+        print(f"Calculated Alpha_c (1e-4 scale): {alpha_calc*1e4:.4f}")
+    
+    # print(synchrotron_frequency(50e3)) 
 
 
 if __name__ == "__main__":
