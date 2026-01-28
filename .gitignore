@@ -2,7 +2,8 @@
 /Archieves/
 /scan_elegant/results/
 /scan_elegant/.vscode/
-/output/scan_alphac_pyele/
+/results/
+/output/
 *.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/
