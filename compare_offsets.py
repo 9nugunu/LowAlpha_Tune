@@ -56,6 +56,10 @@ class MachineParams:
         self.f_rf = 500e6                 # Hz
         self.w_rf = 2 * np.pi * self.f_rf # rad/s
         self.e_x = 190e-9                 # m * rad
+        
+        # Higher order momentum compaction (from ELEGANT)
+        self.alphac2 = 6.15e-2            # Quadratic term
+        self.alphac3 = -9.77              # Cubic term
 
         # Derived
         self.phi_s = np.pi - np.arcsin(self.U_0 / self.V_rf)
@@ -73,15 +77,36 @@ def style_axes(axes):
 
 
 def synchrotron_frequency(alpha, params=PARAMS):
-    """Synchrotron angular frequency w_s(alpha)."""
+    """Synchrotron angular frequency w_s(alpha). Linear approximation."""
     return np.sqrt(-params.V_rf * params.w_rf * alpha * np.cos(params.phi_s)) / np.sqrt(params.E_0 * params.T_0)
 
 
+def synchrotron_frequency_higher_order(alpha, delta, order=2, params=PARAMS):
+    """Synchrotron angular frequency w_s(alpha, delta) with higher-order momentum compaction.
+    
+    order=1: Linear (alpha_1 only)
+    order=2: Quadratic (alpha_1 + alpha_2 * delta)
+    order=3: Cubic (alpha_1 + alpha_2 * delta + alpha_3 * delta^2)
+    """
+    if order == 1:
+        alpha_eff = alpha
+    elif order == 2:
+        alpha_eff = alpha + params.alphac2 * delta
+    else:  # order >= 3
+        alpha_eff = alpha + params.alphac2 * delta + params.alphac3 * delta**2
+    
+    # Ensure alpha_eff is positive to avoid sqrt of negative
+    alpha_eff = np.maximum(alpha_eff, 1e-10)
+    return np.sqrt(-params.V_rf * params.w_rf * alpha_eff * np.cos(params.phi_s)) / np.sqrt(params.E_0 * params.T_0)
+
+
 def x_offset(alpha, delta, params=PARAMS):
-    """Transverse offset from 00_long_x (uses Bessel J1)."""
+    """Transverse offset from 00_long_x (uses Bessel J1).
+    Note: Factor of 2 for both sidebands (vx±vz).
+    """
     w_s = synchrotron_frequency(alpha, params)
     mu_s = w_s * params.T_0 / (2 * np.pi)
-    return np.sqrt(params.e_x * params.beta_x) * sp.j1(delta / mu_s) #/ (2*np.sqrt(2)) # factor retained
+    return np.sqrt(params.e_x * params.beta_x) * 2 * sp.j1(delta / mu_s)  # ×2 for two sidebands
 
 
 def z_offset(alpha, delta, params=PARAMS):
@@ -129,7 +154,16 @@ def load_simulation_slice(delta_target: float):
 
     x_offsets_um = X[idx, :]
     z_offsets_um = Z[idx, :]
-    return alpha_grid, alpha_axis, x_offsets_um, z_offsets_um, delta_used
+    
+    # Load X_main if available
+    x_main_amps = None
+    X_MAIN_PATH = LATEST_SCAN_DIR / "X_main.csv"
+    if X_MAIN_PATH.exists():
+        X_main_df = pd.read_csv(X_MAIN_PATH, index_col=0)
+        X_main_vals = X_main_df.values
+        x_main_amps = X_main_vals[idx, :]
+
+    return alpha_grid, alpha_axis, x_offsets_um, z_offsets_um, delta_used, x_main_amps
 
 
 def theoretical_offsets_um(alpha_grid: np.ndarray, delta: float):
@@ -148,32 +182,29 @@ def plot_combined_powers(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, del
     th_z_dbm = offset_to_power(th_z)
 
     # Plot X curves (Red theme)
-    ax.plot(alpha_axis, th_x_dbm, color="tab:red", linewidth=2.5, label=f"X Theory")
-    ax.plot(alpha_axis, sim_x_dbm, color="tab:red", linestyle="--", marker="o", markersize=6, alpha=0.7, label=f"X Sim")
+    ax.plot(alpha_axis, th_x_dbm, color="red", linewidth=2.5, label=f"X Theory")
+    ax.plot(alpha_axis, sim_x_dbm, color="red", linestyle="--", marker="o", markersize=6, alpha=0.7, label=f"X Sim")
 
     # Plot Z curves (Blue theme)
-    ax.plot(alpha_axis, th_z_dbm, color="tab:blue", linewidth=2.5, label=f"Z Theory")
-    ax.plot(alpha_axis, sim_z_dbm, color="tab:blue", linestyle="--", marker="s", markersize=6, alpha=0.7, label=f"Z Sim")
+    ax.plot(alpha_axis, th_z_dbm, color="blue", linewidth=2.5, label=f"Z Theory")
+    ax.plot(alpha_axis, sim_z_dbm, color="blue", linestyle="--", marker="s", markersize=6, alpha=0.7, label=f"Z Sim")
 
     # Overlay Noise Floor
-    ax.axhline(y=ASSUMED_NOISE_FLOOR, color='black', linestyle=':', linewidth=1.5, label=f'Hardware Noise Floor ({ASSUMED_NOISE_FLOOR} dBm)')
+    # ax.axhline(y=ASSUMED_NOISE_FLOOR, color='black', linestyle=':', linewidth=1.5, label=f'Hardware Noise Floor ({ASSUMED_NOISE_FLOOR} dBm)')
 
-    ax.set_xlabel(r"momentum compaction $\alpha_c \times 10^{-4}$", fontsize=16, fontweight='bold')
-    ax.set_ylabel(r"Signal Power (dBm)", fontsize=16, fontweight='bold')
-    ax.set_title(f"Comparison of X/Z Signal Power\n(delta={delta_target:.2e}, beam={BEAM_CURRENT}uA)", fontsize=18, fontweight='bold')
+    ax.set_xlabel(r"momentum compaction $\alpha_c \times 10^{-4}$")
+    ax.set_ylabel(r"Signal Power (dBm)")
+    ax.set_title(f"Comparison of X/Z Signal Power\n(delta={delta_target:.2e}, beam={BEAM_CURRENT}uA)")
     
     style_axes(ax)
-    ax.legend(loc='upper right', fontsize=12, frameon=True, shadow=True)
+    ax.legend(loc='upper right', frameon=True, shadow=True)
 
     plt.tight_layout()
-    out_path = out_dir / f"overlay_powers_delta{delta_target:.1e}.png"
+    out_path = out_dir / f"overlay_powers_delta{delta_target:.2e}.png"
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
     print(f"Saved overlay power plot to {out_path}")
     return out_path
-
-
-    print(synchrotron_frequency(50e3))
 
 
 def calculate_alpha_from_fs(fs_Hz):
@@ -209,7 +240,7 @@ def calculate_alpha_from_fs(fs_Hz):
 
 def main():
     parser = argparse.ArgumentParser(description="Compare theoretical and simulation offsets vs. alphac for a chosen delta.")
-    parser.add_argument("--delta", type=float, default=2.2e-4, help="Energy spread (delta) to use for theory curve and nearest simulation slice.")
+    parser.add_argument("--delta", type=float, default=2.3e-4, help="Energy spread (delta) to use for theory curve and nearest simulation slice.")
     parser.add_argument(
         "--runfilename",
         default=DEFAULT_RUNFILENAME,
@@ -222,10 +253,14 @@ def main():
 
     out_dir = ensure_output_dir(args.runfilename)
 
-    alpha_grid, alpha_axis, sim_x, sim_z, delta_used = load_simulation_slice(args.delta)
+    alpha_grid, alpha_axis, sim_x, sim_z, delta_used, x_main_amps = load_simulation_slice(args.delta)
     th_x, th_z = theoretical_offsets_um(alpha_grid, args.delta)
 
     plot_combined_powers(alpha_axis, sim_x, sim_z, th_x, th_z, args.delta, delta_used, out_dir)
+    plot_combined_offsets(alpha_axis, sim_x, sim_z, th_x, th_z, args.delta, delta_used, out_dir, x_main_amps)
+    plot_modulation_index(alpha_grid, alpha_axis, sim_x, args.delta, out_dir, x_main_amps)
+    plot_total_amplitude_comparison(alpha_axis, sim_x, th_x, args.delta, out_dir, x_main_amps)
+    plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, args.delta, out_dir, x_main_amps)
     
     if args.measured_fs is not None:
         alpha_calc = calculate_alpha_from_fs(args.measured_fs)
@@ -233,8 +268,219 @@ def main():
         print(f"Measured fs: {args.measured_fs/1000.:.3f} kHz")
         print(f"Calculated Alpha_c: {alpha_calc:.3e}")
         print(f"Calculated Alpha_c (1e-4 scale): {alpha_calc*1e4:.4f}")
+
+
+def plot_combined_offsets(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, delta_used, out_dir: Path, x_main_amps=None):
+    """Plot offsets. Scales THEORY to match simulation carrier amplitude."""
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Calculate theoretical carrier amplitude (Envelope)
+    th_carrier_um = np.sqrt(PARAMS.e_x * PARAMS.beta_x) / 1e-6
+
+    # Scaling Logic: Scale THEORY DOWN to simulation carrier
+    if x_main_amps is not None and np.all(x_main_amps > 1e-9):
+        avg_main = np.median(x_main_amps)
+        scale_factor = avg_main / th_carrier_um  # < 1 typically
+        
+        # Scale theory to match simulation carrier
+        th_x_scaled = th_x * scale_factor
+        label_suffix = " (Scaled)"
+        
+        # Plot original theory for reference (transparent)
+        ax.plot(alpha_axis, th_x, color="red", linestyle=":", alpha=0.3, label="X Theory (Original)")
+    else:
+        th_x_scaled = th_x
+        avg_main = th_carrier_um
+        scale_factor = 1.0
+        label_suffix = ""
+
+    # Plot X curves (Red theme) - Theory scaled, Simulation raw
+    ax.plot(alpha_axis, th_x_scaled, color="red", linewidth=2.5, label=f"X Theory{label_suffix}")
+    ax.plot(alpha_axis, sim_x, color="red", linestyle="--", marker="o", markersize=6, alpha=0.7, label=f"X ELEGANT")
+
+    # Plot Z curves (Blue theme)
+    ax.plot(alpha_axis, th_z, color="blue", linewidth=2.5, label=f"Z Theory")
+    ax.plot(alpha_axis, sim_z, color="blue", linestyle="--", marker="s", markersize=6, alpha=0.7, label=f"Z ELEGANT")
     
-    # print(synchrotron_frequency(50e3)) 
+    # Text annotation for normalization
+    ax.text(0.05, 0.95, f"Theory Carrier: {th_carrier_um:.1f} um\nSim Carrier (avg): {avg_main:.1f} um\nScale Factor: {scale_factor:.4f}", 
+            transform=ax.transAxes, fontsize=12, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+    ax.set_xlabel(r"$\alpha_c \times 10^{-4}$")
+    ax.set_ylabel(r"Amplitude [$\mu m$]")
+    ax.set_title(f"delta={delta_target:.2e}")
+    
+    style_axes(ax)
+    ax.legend(loc='upper right')
+
+    plt.tight_layout()
+    out_path = out_dir / f"overlay_offsets_delta{delta_target:.2e}.png"
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"Saved overlay offset plot to {out_path}")
+
+
+def plot_total_amplitude_comparison(alpha_axis, sim_x, th_x, delta_target, out_dir: Path, x_main_amps=None):
+    """Compare Raw Theory Offset vs Simulation Total Amplitude (Main + Side)."""
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Plot Theory (Raw Offset)
+    ax.plot(alpha_axis, th_x, color="magenta", linewidth=2.5, label=f"X Theory (Offset Only)")
+
+    # Plot Simulation
+    if x_main_amps is not None and np.all(x_main_amps > 1e-9):
+        # Calculate Total Amplitude (Main + Sideband)
+        sim_x_total = sim_x + x_main_amps
+        
+        # Plot Total
+        ax.plot(alpha_axis, sim_x_total, color="darkgreen", linestyle="-", marker="^", markersize=6, alpha=0.7, label=f"X ELEGANT (Total = Main + Side)")
+        
+        # Plot Sideband Only (for reference)
+        ax.plot(alpha_axis, sim_x, color="red", linestyle="--", marker="o", markersize=6, alpha=0.3, label=f"X ELEGANT (Sideband Only)")
+        
+        # Annotate average values
+        avg_theory = np.mean(th_x)
+        avg_sim_total = np.mean(sim_x_total)
+        avg_sim_main = np.median(x_main_amps)
+        
+        text_str = (f"Theory (Offset) avg: {avg_theory:.1f} um\n"
+                    f"Sim (Total) avg: {avg_sim_total:.1f} um\n"
+                    f"Sim (Main) avg: {avg_sim_main:.1f} um")
+        
+        ax.text(0.05, 0.95, text_str, transform=ax.transAxes, fontsize=12, 
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+    else:
+        ax.text(0.5, 0.5, "X_main data missing", transform=ax.transAxes, ha='center')
+
+    ax.set_xlabel(r"$\alpha_c \times 10^{-4}$")
+    ax.set_ylabel(r"Amplitude [$\mu m$]")
+    ax.set_title(f"Hypothesis Check: Theory Offset vs Sim Total (delta={delta_target:.2e})")
+    
+    style_axes(ax)
+    ax.legend(loc='upper right')
+
+    plt.tight_layout()
+    out_path = out_dir / f"hypothesis_total_amp_delta{delta_target:.2e}.png"
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"Saved total amplitude comparison to {out_path}")
+
+
+def plot_modulation_index(alpha_grid, alpha_axis, sim_x, delta_target, out_dir: Path, x_main_amps=None):
+    """Compare dimensionless Modulation Index: Theory J₁(δ/μs) vs Sim (X_side/X_main)."""
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Theory Modulation Index = 2 × J₁(δ/μs) for both sidebands
+    w_s = synchrotron_frequency(alpha_grid)
+    mu_s = w_s * PARAMS.T_0 / (2 * np.pi)
+    th_mod_idx = 2 * sp.j1(delta_target / mu_s)  # ×2 for two sidebands
+    
+    # Simulation Modulation Index = X_side / X_main
+    if x_main_amps is not None and np.all(x_main_amps > 1e-9):
+        sim_mod_idx = sim_x / x_main_amps
+        
+        # Plot both
+        ax.plot(alpha_axis, th_mod_idx, color="purple", linewidth=2.5, label=r"Theory: $J_1(\delta/\mu_s)$")
+        ax.plot(alpha_axis, sim_mod_idx, color="green", linestyle="--", marker="o", markersize=6, alpha=0.7, label=r"ELEGANT: $X_{side}/X_{main}$")
+        
+        # Calculate correlation / ratio
+        valid_mask = (th_mod_idx > 1e-9) & (sim_mod_idx > 1e-9)
+        if np.any(valid_mask):
+            ratio = np.median(sim_mod_idx[valid_mask] / th_mod_idx[valid_mask])
+            ax.text(0.05, 0.95, f"Median Ratio (Sim/Theory): {ratio:.3f}", 
+                    transform=ax.transAxes, fontsize=14, verticalalignment='top', 
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    else:
+        ax.text(0.5, 0.5, "X_main data not available", transform=ax.transAxes, 
+                fontsize=16, ha='center', va='center')
+        return
+    
+    ax.set_xlabel(r"$\alpha_c \times 10^{-4}$")
+    ax.set_ylabel("Modulation Index (dimensionless)")
+    ax.set_title(f"Modulation Index Comparison (delta={delta_target:.2e})")
+    
+    style_axes(ax)
+    ax.legend(loc='upper right')
+
+    plt.tight_layout()
+    out_path = out_dir / f"modulation_index_delta{delta_target:.2e}.png"
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"Saved modulation index plot to {out_path}")
+
+
+def plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, delta_target, out_dir: Path, x_main_amps=None):
+    """Compare Modulation Index with different orders of momentum compaction (alpha_1, alpha_2, alpha_3).
+    
+    Shows how higher-order terms cause 'saturation' at low alpha values.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+    
+    # Left plot: Synchrotron Tune comparison
+    ax1 = axes[0]
+    
+    # Linear (1st order): nu_s(alpha_1 only)
+    w_s_linear = synchrotron_frequency_higher_order(alpha_grid, delta_target, order=1)
+    mu_s_linear = w_s_linear * PARAMS.T_0 / (2 * np.pi)
+    nu_s_linear_kHz = w_s_linear / (2 * np.pi * 1000)
+    
+    # Quadratic (2nd order): nu_s(alpha_1 + alpha_2 * delta)
+    w_s_quad = synchrotron_frequency_higher_order(alpha_grid, delta_target, order=2)
+    mu_s_quad = w_s_quad * PARAMS.T_0 / (2 * np.pi)
+    nu_s_quad_kHz = w_s_quad / (2 * np.pi * 1000)
+    
+    # Cubic (3rd order): nu_s(alpha_1 + alpha_2 * delta + alpha_3 * delta^2)
+    w_s_cubic = synchrotron_frequency_higher_order(alpha_grid, delta_target, order=3)
+    mu_s_cubic = w_s_cubic * PARAMS.T_0 / (2 * np.pi)
+    nu_s_cubic_kHz = w_s_cubic / (2 * np.pi * 1000)
+    
+    ax1.plot(alpha_axis, nu_s_linear_kHz, color="blue", linewidth=2.5, label=r"$\nu_s$ (1st: $\alpha_1$)")
+    ax1.plot(alpha_axis, nu_s_quad_kHz, color="orange", linewidth=2.5, linestyle="--", label=r"$\nu_s$ (2nd: $+\alpha_2 \delta$)")
+    ax1.plot(alpha_axis, nu_s_cubic_kHz, color="red", linewidth=2.5, linestyle="-.", label=r"$\nu_s$ (3rd: $+\alpha_3 \delta^2$)")
+    
+    ax1.set_xlabel(r"$\alpha_c \times 10^{-4}$")
+    ax1.set_ylabel(r"Synchrotron Frequency $\nu_s$ [kHz]")
+    ax1.set_title(f"Synchrotron Tune: Higher Order Effects (δ = {delta_target:.2e})")
+    
+    # Text box with coefficients
+    text_str = (f"$\\alpha_2$ = {PARAMS.alphac2:.2e}\n"
+                f"$\\alpha_3$ = {PARAMS.alphac3:.2e}\n"
+                f"$\\alpha_2 \\delta$ = {PARAMS.alphac2 * delta_target:.2e}\n"
+                f"$\\alpha_3 \\delta^2$ = {PARAMS.alphac3 * delta_target**2:.2e}")
+    ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=11, verticalalignment='top', 
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    style_axes(ax1)
+    ax1.legend(loc='upper right')
+    
+    # Right plot: Modulation Index comparison
+    ax2 = axes[1]
+    
+    # Modulation Index for each order
+    mod_idx_linear = 2 * sp.j1(delta_target / mu_s_linear)
+    mod_idx_quad = 2 * sp.j1(delta_target / mu_s_quad)
+    mod_idx_cubic = 2 * sp.j1(delta_target / mu_s_cubic)
+    
+    ax2.plot(alpha_axis, mod_idx_linear, color="blue", linewidth=2.5, label=r"$2J_1$ (1st order)")
+    ax2.plot(alpha_axis, mod_idx_quad, color="orange", linewidth=2.5, linestyle="--", label=r"$2J_1$ (2nd order)")
+    ax2.plot(alpha_axis, mod_idx_cubic, color="red", linewidth=2.5, linestyle="-.", label=r"$2J_1$ (3rd order)")
+    
+    # Add simulation data if available
+    if x_main_amps is not None and np.all(x_main_amps > 1e-9):
+        sim_mod_idx = sim_x / x_main_amps
+        ax2.plot(alpha_axis, sim_mod_idx, color="green", linestyle=":", marker="o", markersize=5, alpha=0.7, label="Simulation")
+    
+    ax2.set_xlabel(r"$\alpha_c \times 10^{-4}$")
+    ax2.set_ylabel("Modulation Index")
+    ax2.set_title(f"Modulation Index: Higher Order Comparison (δ = {delta_target:.2e})")
+    style_axes(ax2)
+    ax2.legend(loc='upper right')
+
+    plt.tight_layout()
+    out_path = out_dir / f"alpha_order_comparison_delta{delta_target:.2e}.png"
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+    print(f"Saved higher-order alpha comparison plot to {out_path}")
 
 
 if __name__ == "__main__":

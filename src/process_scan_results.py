@@ -207,19 +207,23 @@ def amp_cal(p):
                     vz_sb_right = sb_right_freq - vx
 
         # --- Debug Plot with Subplots (Zoomed vz and vx sidebands) ---
+        # --- Filtering (User's Physics: X=Sidebands, Z=Main) ---
+        bw = 0.001 # User preference: Bandwidth used for filtering
+
+        # --- Debug Plot with Subplots (Zoomed vz and vx sidebands) ---
         if (vx > 0 or vz > 0) and np.random.random() < 0.02:
             debug_dir = OUT_DIR / "debug_peaks"
             debug_dir.mkdir(parents=True, exist_ok=True)
             
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-            bw_debug = 0.001 # Bandwidth used for filtering
+            # bw used for visualization spans
             
             # Subplot 1: Z-Tune (Synchrotron) - Focused on 0-0.15 MHz
             mask1 = (freq >= 0) & (freq < 0.1)
             ax1.semilogy(freq[mask1], np.abs(fft_z[mask1]), color='royalblue', alpha=0.7, label='Z Spectrum')
             if vz > 0:
                 ax1.axvline(vz, color='g', linestyle='--', label=f'vz={vz:.4f} MHz')
-                ax1.axvspan(vz - bw_debug/2, vz + bw_debug/2, color='green', alpha=0.2, label='vz filter')
+                ax1.axvspan(vz - bw/2, vz + bw/2, color='green', alpha=0.2, label='vz filter')
             ax1.set_title(f"Z-Tune Zoom (Synchrotron)")
             ax1.set_xlabel("Frequency [MHz]")
             ax1.set_ylabel("Amplitude")
@@ -236,76 +240,67 @@ def amp_cal(p):
                     # Sidebands vx +/- vz
                     ax2.axvline(vx - vz, color='orange', linestyle=':', label=f'vx-vz ({vx-vz:.4f})')
                     ax2.axvline(vx + vz, color='orange', linestyle=':', label=f'vx+vz ({vx+vz:.4f})')
-                    ax2.axvspan(vx - vz - bw_debug/2, vx - vz + bw_debug/2, color='orange', alpha=0.1)
-                    ax2.axvspan(vx + vz - bw_debug/2, vx + vz + bw_debug/2, color='orange', alpha=0.1)
+                    ax2.axvspan(vx - vz - bw/2, vx - vz + bw/2, color='orange', alpha=0.1)
+                    ax2.axvspan(vx + vz - bw/2, vx + vz + bw/2, color='orange', alpha=0.1)
             ax2.set_title(f"X-Tune & Sidebands Zoom")
             ax2.set_xlabel("Frequency [MHz]")
             ax2.grid(True, which='both', ls=':', alpha=0.5)
             ax2.legend(fontsize=8, loc='upper right')
 
-            plt.suptitle(f"Debug Analysis (A={valA:.2e}, D={valD:.2e})", fontsize=14, fontweight='bold')
+            plt.suptitle(f"Debug Analysis (A={valA:.2e}, D={valD:.2e}, bw={bw:.1e})", fontsize=14, fontweight='bold')
             plt.tight_layout(rect=[0, 0.03, 1, 0.95])
             plt.savefig(debug_dir / f"check_A{valA:.2e}_D{valD:.2e}.png", dpi=250)
             plt.close()
 
         if vx == 0 or vz == 0:
-            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, vx, vz, 0.0, 0.0, 0.0, 0.0]
+            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, vx, vz, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-        # --- Filtering (User's Physics: X=Sidebands, Z=Main) ---
-        bw = 0.001 # User preference
+        # --- Filtering applied using defining 'bw' above ---
         
-        # fx_filt: Extract ONLY the sidebands (ttt=2)
-        fx_filt = filtering_norm(freq, fft_x, vx, bw, 2, vz=vz)
+        # fx_main: Extract ONLY the main betatron peak (ttt=0) - Carrier amplitude
+        fx_main = filtering_norm(freq, fft_x, vx, bw, 0)
+        
+        # fx_side: Extract ONLY the sidebands (ttt=2) - Modulation amplitude
+        fx_side = filtering_norm(freq, fft_x, vx, bw, 2, vz=vz)
         
         # fz_filt: Extract ONLY the main synchrotron peak (ttt=0)
         fz_filt = filtering_norm(freq, fft_z, vz, bw, 0)
 
-        filtered_x = np.real(ifftshift(ifft(fx_filt)))
+        # fx_comb: Combine Main + Sidebands (Carrier + Modulation)
+        fx_comb = fx_main + fx_side
+        
+        filtered_x_main = np.real(ifftshift(ifft(fx_main)))
+        filtered_x_side = np.real(ifftshift(ifft(fx_side)))
+        filtered_x_comb = np.real(ifftshift(ifft(fx_comb)))
         filtered_z = np.real(ifftshift(ifft(fz_filt)))
 
         # --- Noise Floor Calculation (Median of Spectrum) ---
-        # Normalize to same units as amplitude (micrometers)
-        # fft_x is raw FFT, need to scale same as max peak extraction?
-        # The max extraction used: np.max(np.abs(filtered_x)) / 10**-6
-        # filtered_x is IFFT(filtered), which is reconstruction.
-        # Ideally noise floor should be estimated from the noise region of spectrum.
-        # But median of spectrum is a robust proxy.
-        # Note: fft_x was calculated but not normalized by N properly in plotting? 
-        # Actually amp_cal returns time-domain max amplitude.
-        # Let's use the median of the TIME DOMAIN residual signal if we want 'noise amplitude'?
-        # Or median of Frequency domain?
-        # User request: "noise analysis of beam signal measurement interval" -> "baseline"
-        # Let's take the median of the FFT magnitude spectrum as the noise floor reference.
-        # We need to ensure the unit scaling matches X_amp.
-        # X_amp comes from IFFT of filtered spectrum.
-        # If we take median of Spectrum, we are in Frequency domain.
-        # Let's return the median of the abs(FFT) scaled to same arbitrary unit, 
-        # OR better: Noise amplitude in time domain (unfiltered - filtered)?
-        # Let's stick to median of Spectrum for "Baseline Noise Level" concept.
-        # We need to check scaling factor `scale` used in `filtering_norm` or `fft`.
-        # In this script, standard fft is used.
-        # For consistency with X_amp (which is um), let's estimate noise in um equivalent?
-        # Simple approach: Noise = Median(abs(fft)) * 2 (for single sided) / N ?
-        # Actually simplest is to return the median value of the computed FFT `fft_x`, 
-        # assuming `fft_x` scaling is consistent with signal peaks.
         noise_x = np.median(np.abs(fft_x))
         noise_z = np.median(np.abs(fft_z))
+        
+        # X amplitudes
+        X_main_amp = np.max(np.abs(filtered_x_main)) / 10**-6
+        X_side_amp = np.max(np.abs(filtered_x_side)) / 10**-6
+        X_comb_amp = np.max(np.abs(filtered_x_comb)) / 10**-6  # Combined Amplitude
 
         return [
-            round(valA / 10**-4, 8), 
-            round(valD / 10**-4, 8), 
-            np.max(np.abs(filtered_x)) / 10**-6, 
-            np.max(np.abs(filtered_z)) / 10**-6,
-            vx, 
-            vz,
-            vz_sb_left,
-            vz_sb_right,
-            noise_x,
-            noise_z
+            round(valA / 10**-4, 8),   # 0: alpha
+            round(valD / 10**-4, 8),   # 1: delta
+            X_main_amp,                 # 2: X main peak
+            X_side_amp,                 # 3: X sideband
+            np.max(np.abs(filtered_z)) / 10**-6,  # 4: Z amplitude
+            vx,                         # 5: vx
+            vz,                         # 6: vz
+            vz_sb_left,                 # 7: vz_sb_l
+            vz_sb_right,                # 8: vz_sb_r
+            noise_x,                    # 9: noise X
+            noise_z,                    # 10: noise Z
+            X_side_amp / X_main_amp if X_main_amp > 0 else 0.0, # 11: mod_idx
+            X_comb_amp                  # 12: X combined (Main + Side)
         ]
     except Exception as e:
         # print(f"Error processing {fpath.name}: {e}")
-        return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 if __name__ == "__main__":
     if FDIR:
@@ -378,48 +373,65 @@ if __name__ == "__main__":
         else:
             results = np.array([amp_cal(new_value[i]) for i in range(len(new_value))])
 
-        # Results shape is now (N, 10): [alpha, delta, X_amp, Z_amp, vx, vz, vz_sb_l, vz_sb_r, nx, nz]
-        results = results.reshape((-1, 10))
+        # Results shape is now (N, 13): 
+        # [0:alpha, 1:delta, 2:X_main, 3:X_side, 4:Z_amp, 5:vx, 6:vz, 7:vz_sb_l, 8:vz_sb_r, 9:nx, 10:nz, 11:mod_idx, 12: X_comb]
+        results = results.reshape((-1, 13))
 
-        # 1. Save Amplitudes CSV
-        # Include noise columns
-        amp_df = pd.DataFrame(results[:, [0, 1, 2, 3, 8, 9]], columns=['alpha_c_1e4', 'delta_1e4', 'X_amp_um', 'Z_amp_um', 'Noise_X_raw', 'Noise_Z_raw'])
+        # 1. Save Amplitudes CSV (including main/sideband separation and modulation index)
+        amp_df = pd.DataFrame(
+            results[:, [0, 1, 2, 3, 12, 4, 9, 10, 11]], 
+            columns=['alpha_c_1e4', 'delta_1e4', 'X_main_um', 'X_side_um', 'X_comb_um', 'Z_amp_um', 'Noise_X_raw', 'Noise_Z_raw', 'Mod_Index']
+        )
         amp_csv = FDIR / "scan_amplitudes.csv"
         amp_df.to_csv(amp_csv, index=False)
         print(f"Amplitudes saved to: {amp_csv}")
 
         # 2. Save Tunes CSV
-        # Select columns 0, 1, 4, 5, 6, 7
-        tune_data = results[:, [0, 1, 4, 5, 6, 7]]
+        # Columns: alpha, delta, vx, vz, vz_sb_minus, vz_sb_plus
+        tune_data = results[:, [0, 1, 5, 6, 7, 8]]
         tune_df = pd.DataFrame(tune_data, columns=['alpha_c_1e4', 'delta_1e4', 'vx_MHz', 'vz_from_Z_MHz', 'vz_sb_minus_MHz', 'vz_sb_plus_MHz'])
         tune_csv = FDIR / "scan_tunes.csv"
         tune_df.to_csv(tune_csv, index=False)
         print(f"Tunes saved to: {tune_csv}")
 
         Z = np.zeros((len(delD_new), len(alpha_new)))
-        X = np.zeros((len(delD_new), len(alpha_new)))
+        X = np.zeros((len(delD_new), len(alpha_new)))       # This will store X_SIDEBAND (raw)
+        X_side = np.zeros((len(delD_new), len(alpha_new)))  # Store sideband separately (redundant but safe)
+        X_main = np.zeros((len(delD_new), len(alpha_new)))
 
         # 1. Create a fast lookup dictionary (O(N))
         result_map = {}
         for res in results:
             key = (round(res[0], 6), round(res[1], 6))
-            result_map[key] = (res[2], res[3])
+            # Store: (X_main, X_side, X_comb, Z_amp)
+            result_map[key] = (res[2], res[3], res[12], res[4])
 
         # 2. Fill the grid using the lookup table
         for i, a in enumerate(alpha_new):
             for k, d in enumerate(delD_new):
                 match = result_map.get((round(a, 6), round(d, 6)))
                 if match:
-                    X[k][i] = match[0]
-                    Z[k][i] = match[1]
- # Found it, break inner loop
+                    X_main[k][i] = match[0]  # Main X peak
+                    X[k][i]      = match[1]  # <--- REVERT: Save SIDEBAND amp to X (raw data)
+                    Z[k][i]      = match[3]  # Z amplitude
 
         # Save as Pandas DataFrame for labeled CSV
         df_x = pd.DataFrame(X, index=delD_new, columns=alpha_new)
         df_z = pd.DataFrame(Z, index=delD_new, columns=alpha_new)
+        df_x_main = pd.DataFrame(X_main, index=delD_new, columns=alpha_new)
+        df_x_side = pd.DataFrame(X, index=delD_new, columns=alpha_new) # Same as X
         
+        # X.csv now contains the SIDEBAND amplitude (raw)
         df_x.to_csv(x_csv)
         df_z.to_csv(z_csv)
+        
+        # Save X_main and X_side separately
+        x_main_csv = FDIR / "X_main.csv"
+        x_side_csv = FDIR / "X_sidebands.csv"
+        df_x_main.to_csv(x_main_csv)
+        df_x_side.to_csv(x_side_csv)
+        print(f"X_main (carrier) saved to: {x_main_csv}")
+        print(f"X_side (sideband) saved to: {x_side_csv}")
 
     # Plot Z contour
     fig, ax = plt.subplots(1, 1, figsize=(12, 9))

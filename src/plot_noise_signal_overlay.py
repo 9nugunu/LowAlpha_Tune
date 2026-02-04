@@ -12,7 +12,7 @@ from config import *
 from visualization import PlotConfig
 
 # --- Matplotlib High-Visibility Settings ---
-PlotConfig(label_size=14, font_size=12, line_width=2).apply_settings()
+PlotConfig(line_width=4).apply_settings()
 plt.rcParams['grid.alpha'] = 0.3
 
 # --- 1. Load Hardware Noise Data (from noise_fsp logic) ---
@@ -98,7 +98,7 @@ except Exception as e:
 plt.figure(figsize=(12, 7))
 
 # A. Plot Noise Floor (Mean + Standard Deviation shading)
-plt.semilogx(freq_noise / 1000.0, mean_noise_dbm_hz, color='blue', alpha=0.9, linewidth=1.5, label='Noise')
+plt.semilogx(freq_noise / 1000.0, mean_noise_dbm_hz, color='blue', alpha=0.9, label='Noise')
 plt.fill_between(freq_noise / 1000.0, 
                  mean_noise_dbm_hz - std_noise_dbm_hz, 
                  mean_noise_dbm_hz + std_noise_dbm_hz, 
@@ -141,16 +141,16 @@ for i, d in enumerate(target_deltas):
 
 # C. Decorations
 cbar = plt.colorbar(sc, ticks=np.linspace(df['alpha_c_1e4'].min(), df['alpha_c_1e4'].max(), 10))
-cbar.set_label(r'$\alpha_c$ [$\times 10^{-4}$]', rotation=270, labelpad=20)
+cbar.set_label(r'$\alpha_c$ [$\times 10^{-4}$]', rotation=270, labelpad=30)
 
 plt.xlabel('Frequency [kHz]')
 plt.ylabel('Power [dBm]')
-plt.title(fr'Phase noise w/ BPM amplitude w.r.t $\alpha_c$ (Current={BEAM_CURRENT}uA)')
+# plt.title(fr'Phase noise w/ BPM amplitude w.r.t $\alpha_c$ (Current={BEAM_CURRENT}uA)')
 
 plt.xlim(0.01, 100)
 # plt.ylim(-110, -60)
 plt.grid(True, which='both', linestyle=':', alpha=0.4)
-plt.legend(loc='upper left', frameon=True, shadow=True)
+plt.legend(loc='upper left')
 
 # Save result
 deltas_str = "_".join([f"{d:.1f}" for d in target_deltas])
