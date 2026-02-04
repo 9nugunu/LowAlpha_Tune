@@ -3,7 +3,11 @@ from pathlib import Path
 # --- Path Configuration ---
 # Set the specific scan folder you want to analyze
 # Example: "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_100000turn_Ok"
-SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_70000"
+# SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_70000/2.5kHz_result"
+# SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_70000/4kHz_result"
+# SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_70000/1kHz_result"
+SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04-x_signal"
+
 
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_ROOT = BASE_DIR / "output" / "scan_alphac_pyele"
