@@ -4,7 +4,7 @@ import numpy as np
 from pathlib import Path
 
 class ElegantDataExtractor:
-    def __init__(self, twiss_file, param_file, rf_element_name="RF1", watch_element_name="WISLAND"):
+    def __init__(self, twiss_file, param_file, rf_element_name="RF1", watch_element_name="WISLANDP"):
         """
         twiss_file: Path to .twi file from &twiss_output
         param_file: Path to .param file
@@ -27,6 +27,8 @@ class ElegantDataExtractor:
         self.T_0 = 0.0
         self.beta_x = 0.0
         self.e_x = 0.0
+        self.alphac = 0.0
+        self.alphac2 = 0.0
         self.V_rf = 0.0
         self.f_rf = 0.0
         self.w_rf = 0.0
@@ -119,6 +121,18 @@ class ElegantDataExtractor:
         else:
             print(f"Warning: Param file not found: {self.param_file}")
 
+        # 7. Momentum Compaction Factors (alphac, alphac2)
+        # These are parameters in the .twi file (Global values), not columns
+        res = self._run_cmd(f"sdds2stream {twi} -parameter=alphac")
+        if res:
+            try: self.alphac = float(res)
+            except ValueError: pass
+            
+        res = self._run_cmd(f"sdds2stream {twi} -parameter=alphac2")
+        if res:
+            try: self.alphac2 = float(res)
+            except ValueError: pass
+
         # Derived
         self.w_rf = 2 * np.pi * self.f_rf
 
@@ -130,6 +144,8 @@ class ElegantDataExtractor:
         print(f"T_0 (Revolution Period): {self.T_0:.4e} s")
         print(f"Beta_x at {self.watch_name}: {self.beta_x:.4f} m")
         print(f"Emittance_x: {self.e_x:.4e} m*rad")
+        print(f"Alpha_c (Linear): {self.alphac:.4e}")
+        print(f"Alpha_c2 (Quadratic): {self.alphac2:.4e}")
         print(f"RF Voltage ({self.rf_name}): {self.V_rf:.4e} V")
         print(f"RF Frequency ({self.rf_name}): {self.f_rf:.4e} Hz")
 
@@ -151,7 +167,7 @@ if __name__ == "__main__":
             twiss_file=target_twi,
             param_file=target_param,
             rf_element_name="RF1",
-            watch_element_name="WISLAND"
+            watch_element_name="WISLANDP"
         )
         extractor.print_summary()
     else:
