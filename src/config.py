@@ -6,7 +6,8 @@ from pathlib import Path
 # SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_70000/2.5kHz_result"
 # SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_70000/4kHz_result"
 # SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04_70000/1kHz_result"
-SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04-x_signal"
+# SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04-x_signal"
+SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04-x_signal_50000_onpass"
 
 
 BASE_DIR = Path(__file__).parent.parent

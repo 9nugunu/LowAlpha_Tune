@@ -127,7 +127,8 @@ def offset_to_power(offset_um):
 
 
 def ensure_output_dir(runfilename: str) -> Path:
-    out_dir = Path("output") / runfilename
+    """Creates a subfolder under the current scan directory for results."""
+    out_dir = LATEST_SCAN_DIR / runfilename
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
@@ -244,7 +245,7 @@ def main():
     parser.add_argument(
         "--runfilename",
         default=DEFAULT_RUNFILENAME,
-        help="Folder name under output/ where plots will be saved.",
+        help="Subfolder name under the current scan directory where plots will be saved.",
     )
     # Add argument for calculating alpha from measured fs
     parser.add_argument("--measured_fs", type=float, default=None, help="Measured synchrotron frequency (Hz) to calc alpha")
@@ -287,7 +288,7 @@ def plot_combined_offsets(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, de
         label_suffix = " (Scaled)"
         
         # Plot original theory for reference (transparent)
-        ax.plot(alpha_axis, th_x, color="red", linestyle=":", alpha=0.3, label="X Theory (Original)")
+        # ax.plot(alpha_axis, th_x, color="red", linestyle=":", alpha=0.3, label="X Theory (Original)")
     else:
         th_x_scaled = th_x
         avg_main = th_carrier_um
@@ -295,7 +296,7 @@ def plot_combined_offsets(alpha_axis, sim_x, sim_z, th_x, th_z, delta_target, de
         label_suffix = ""
 
     # Plot X curves (Red theme) - Theory scaled, Simulation raw
-    ax.plot(alpha_axis, th_x_scaled, color="red", linewidth=2.5, label=f"X Theory{label_suffix}")
+    # ax.plot(alpha_axis, th_x_scaled, color="red", linewidth=2.5, label=f"X Theory{label_suffix}")
     ax.plot(alpha_axis, sim_x, color="red", linestyle="--", marker="o", markersize=6, alpha=0.7, label=f"X ELEGANT")
 
     # Plot Z curves (Blue theme)
@@ -380,34 +381,40 @@ def plot_modulation_index(alpha_grid, alpha_axis, sim_x, delta_target, out_dir: 
     if x_main_amps is not None and np.all(x_main_amps > 1e-9):
         sim_mod_idx = sim_x / x_main_amps
         
-        # Plot both
-        ax.plot(alpha_axis, th_mod_idx, color="purple", linewidth=2.5, label=r"Theory: $J_1(\delta/\mu_s)$")
-        ax.plot(alpha_axis, sim_mod_idx, color="green", linestyle="--", marker="o", markersize=6, alpha=0.7, label=r"ELEGANT: $X_{side}/X_{main}$")
-        
         # Calculate correlation / ratio
         valid_mask = (th_mod_idx > 1e-9) & (sim_mod_idx > 1e-9)
+        ratio_label = ""
         if np.any(valid_mask):
             ratio = np.median(sim_mod_idx[valid_mask] / th_mod_idx[valid_mask])
-            ax.text(0.05, 0.95, f"Median Ratio (Sim/Theory): {ratio:.3f}", 
-                    transform=ax.transAxes, fontsize=14, verticalalignment='top', 
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            ratio_label = f" (Ratio: {ratio:.3f})"
+        
+        # Plot both
+        ax.plot(alpha_axis, th_mod_idx, color="purple", linewidth=2.5, label=r"Modeling: $2 J_1(\delta/\mu_s)$")
+        ax.plot(alpha_axis, sim_mod_idx, color="green", linestyle="-", marker="o", markersize=6, alpha=0.7, 
+                label=r"ELEGANT: $X_{side}/X_{main}$" + "\n" +ratio_label)
     else:
         ax.text(0.5, 0.5, "X_main data not available", transform=ax.transAxes, 
                 fontsize=16, ha='center', va='center')
         return
     
     ax.set_xlabel(r"$\alpha_c \times 10^{-4}$")
-    ax.set_ylabel("Modulation Index (dimensionless)")
-    ax.set_title(f"Modulation Index Comparison (delta={delta_target:.2e})")
+    ax.set_ylabel("Modulation ratio")
+    ax.set_title(fr"Comparison of modulation ($\delta={delta_target:.2e}$)")
+    
+    # Set Y-axis limits for consistent comparison (2*J1 max is ~1.16)
+    y_max = max(1.0, np.max(th_mod_idx) * 1.1)
+    if sim_mod_idx is not None:
+        y_max = max(y_max, np.max(sim_mod_idx) * 1.1)
+    ax.set_ylim(0, y_max)
     
     style_axes(ax)
     ax.legend(loc='upper right')
 
     plt.tight_layout()
-    out_path = out_dir / f"modulation_index_delta{delta_target:.2e}.png"
+    out_path = out_dir / f"modulation_ratio_delta_{delta_target:.2e}.png"
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
-    print(f"Saved modulation index plot to {out_path}")
+    print(f"Saved modulation ratio plot to {out_path}")
 
 
 def plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, delta_target, out_dir: Path, x_main_amps=None):
@@ -440,8 +447,8 @@ def plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, delta_target, out_dir:
     ax1.plot(alpha_axis, nu_s_cubic_kHz, color="red", linewidth=2.5, linestyle="-.", label=r"$\nu_s$ (3rd: $+\alpha_3 \delta^2$)")
     
     ax1.set_xlabel(r"$\alpha_c \times 10^{-4}$")
-    ax1.set_ylabel(r"Synchrotron Frequency $\nu_s$ [kHz]")
-    ax1.set_title(f"Synchrotron Tune: Higher Order Effects (δ = {delta_target:.2e})")
+    ax1.set_ylabel(r"$\nu_s$ [kHz]")
+    ax1.set_title(r"$\nu_s$ variation")
     
     # Text box with coefficients
     text_str = (f"$\\alpha_2$ = {PARAMS.alphac2:.2e}\n"
@@ -451,7 +458,7 @@ def plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, delta_target, out_dir:
     ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=11, verticalalignment='top', 
              bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     style_axes(ax1)
-    ax1.legend(loc='upper right')
+    ax1.legend(loc='center right')
     
     # Right plot: Modulation Index comparison
     ax2 = axes[1]
@@ -468,15 +475,24 @@ def plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, delta_target, out_dir:
     # Add simulation data if available
     if x_main_amps is not None and np.all(x_main_amps > 1e-9):
         sim_mod_idx = sim_x / x_main_amps
-        ax2.plot(alpha_axis, sim_mod_idx, color="green", linestyle=":", marker="o", markersize=5, alpha=0.7, label="Simulation")
+        ax2.plot(alpha_axis, sim_mod_idx, color="green", linestyle="-", marker="o", markersize=5, alpha=0.7, label="Simulation")
     
     ax2.set_xlabel(r"$\alpha_c \times 10^{-4}$")
-    ax2.set_ylabel("Modulation Index")
-    ax2.set_title(f"Modulation Index: Higher Order Comparison (δ = {delta_target:.2e})")
+    ax2.set_ylabel("Modulation")
+    ax2.set_title(r"Modulation variation")
+    
+    # Set Y-axis limits for consistent comparison
+    y_max_th = max(np.max(mod_idx_linear), np.max(mod_idx_quad), np.max(mod_idx_cubic))
+    y_max = max(1.0, y_max_th * 1.1)
+    if x_main_amps is not None and np.all(x_main_amps > 1e-9):
+        y_max = max(y_max, np.max(sim_x / x_main_amps) * 1.1)
+    ax2.set_ylim(0, y_max)
+    
     style_axes(ax2)
     ax2.legend(loc='upper right')
 
-    plt.tight_layout()
+    fig.suptitle(fr"$\alpha$ higher order effects ($\delta = {delta_target:.2e}$)", fontweight='bold')
+    plt.tight_layout(rect=[0, 0, 1, 1])
     out_path = out_dir / f"alpha_order_comparison_delta{delta_target:.2e}.png"
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
