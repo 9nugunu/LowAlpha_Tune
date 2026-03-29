@@ -391,7 +391,7 @@ def plot_modulation_index(alpha_grid, alpha_axis, sim_x, delta_target, out_dir: 
         # Plot both
         ax.plot(alpha_axis, th_mod_idx, color="purple", linewidth=2.5, label=r"Modeling: $2 J_1(\delta/\mu_s)$")
         ax.plot(alpha_axis, sim_mod_idx, color="green", linestyle="-", marker="o", markersize=6, alpha=0.7, 
-                label=r"ELEGANT: $X_{side}/X_{main}$" + "\n" +ratio_label)
+                label=r"ELEGANT: $X_{side}/X_{main}$") #  + "\n" +ratio_label
     else:
         ax.text(0.5, 0.5, "X_main data not available", transform=ax.transAxes, 
                 fontsize=16, ha='center', va='center')
@@ -402,7 +402,7 @@ def plot_modulation_index(alpha_grid, alpha_axis, sim_x, delta_target, out_dir: 
     ax.set_title(fr"Comparison of modulation ($\delta={delta_target:.2e}$)")
     
     # Set Y-axis limits for consistent comparison (2*J1 max is ~1.16)
-    y_max = max(1.0, np.max(th_mod_idx) * 1.1)
+    y_max = max(0.8, np.max(th_mod_idx) * 1.1)
     if sim_mod_idx is not None:
         y_max = max(y_max, np.max(sim_mod_idx) * 1.1)
     ax.set_ylim(0, y_max)
@@ -442,9 +442,9 @@ def plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, delta_target, out_dir:
     mu_s_cubic = w_s_cubic * PARAMS.T_0 / (2 * np.pi)
     nu_s_cubic_kHz = w_s_cubic / (2 * np.pi * 1000)
     
-    ax1.plot(alpha_axis, nu_s_linear_kHz, color="blue", linewidth=2.5, label=r"$\nu_s$ (1st: $\alpha_1$)")
-    ax1.plot(alpha_axis, nu_s_quad_kHz, color="orange", linewidth=2.5, linestyle="--", label=r"$\nu_s$ (2nd: $+\alpha_2 \delta$)")
-    ax1.plot(alpha_axis, nu_s_cubic_kHz, color="red", linewidth=2.5, linestyle="-.", label=r"$\nu_s$ (3rd: $+\alpha_3 \delta^2$)")
+    ax1.plot(alpha_axis, nu_s_linear_kHz, color="blue", linewidth=2.5, label=r"1st: $\alpha_1$")
+    ax1.plot(alpha_axis, nu_s_quad_kHz, color="orange", linewidth=2.5, linestyle="--", label=r"$2^{nd}$: $\alpha_2 \delta$")
+    ax1.plot(alpha_axis, nu_s_cubic_kHz, color="red", linewidth=2.5, linestyle="-.", label=r"$3^{rd}$: $\alpha_3 \delta^2$")
     
     ax1.set_xlabel(r"$\alpha_c \times 10^{-4}$")
     ax1.set_ylabel(r"$\nu_s$ [kHz]")
@@ -483,7 +483,7 @@ def plot_alpha2_comparison(alpha_grid, alpha_axis, sim_x, delta_target, out_dir:
     
     # Set Y-axis limits for consistent comparison
     y_max_th = max(np.max(mod_idx_linear), np.max(mod_idx_quad), np.max(mod_idx_cubic))
-    y_max = max(1.0, y_max_th * 1.1)
+    y_max = max(0.8, y_max_th * 1.1)
     if x_main_amps is not None and np.all(x_main_amps > 1e-9):
         y_max = max(y_max, np.max(sim_x / x_main_amps) * 1.1)
     ax2.set_ylim(0, y_max)

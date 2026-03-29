@@ -21,6 +21,10 @@ dist/
 wheels/
 *.egg-info/
 
+# Claude Code
+CLAUDE.md
+.claude/
+
 # IDE settings
 .vscode/
 .idea/
