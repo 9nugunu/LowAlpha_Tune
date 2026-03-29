@@ -36,10 +36,8 @@ def get_parser():
     parser.add_argument("--dir", type=str, default=None, help="Specific scan directory name to process.")
     return parser.parse_args()
 
-args = get_parser()
-
-# --- User Configuration ---
-TARGET_SCAN_DIR = args.dir
+# Set from CLI args in __main__
+TARGET_SCAN_DIR = None
 
 
 def get_latest_scan_dir():
@@ -98,14 +96,9 @@ def load_metadata(fdir: Path):
     return None
 
 
-FDIR = get_latest_scan_dir()
-
-# Initialize OUT_DIR based on the scan directory name to avoid overwriting
-if FDIR:
-    OUT_DIR = PROJECT_ROOT / "output" / Path(__file__).stem / FDIR.name
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-else:
-    OUT_DIR = PROJECT_ROOT / "output" / Path(__file__).stem
+# Initialized in __main__
+FDIR = None
+OUT_DIR = None
 
 
 def col_page(filename, column):
@@ -303,6 +296,15 @@ def amp_cal(p):
         return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 if __name__ == "__main__":
+    args = get_parser()
+    TARGET_SCAN_DIR = args.dir
+    FDIR = get_latest_scan_dir()
+    if FDIR:
+        OUT_DIR = PROJECT_ROOT / "output" / Path(__file__).stem / FDIR.name
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+    else:
+        OUT_DIR = PROJECT_ROOT / "output" / Path(__file__).stem
+
     if FDIR:
         print(f"Processing latest scan results from: {FDIR}")
     else:

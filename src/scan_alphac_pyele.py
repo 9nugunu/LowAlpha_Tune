@@ -39,8 +39,6 @@ def safe_rename(src: Path, dst: Path, retries: int = 5, delay: float = 0.5):
             raise
     return False
 
-args = get_args()
-
 BASE_DIR = Path(__file__).parent
 SRC_DIR = BASE_DIR
 PROJECT_ROOT = BASE_DIR.parent
@@ -50,20 +48,14 @@ CHECK_FILE_NAME = "check.ele"
 LTE_FILE_NAME = "mlsLA.LTE"
 RESULTS_BASE_DIR = PROJECT_ROOT / "output" / "scan_alphac_pyele"
 
-# alpha_c scan range (From args)
-SCAN_START_A = args.startA
-SCAN_STOP_A = args.stopA
-SCAN_STEP_A = args.stepA
-
-# delta (energy spread) scan range (From args)
-SCAN_START_D = args.startD
-SCAN_STOP_D = args.stopD
-SCAN_STEP_D = args.stepD
-
 # parallel workers for sweep (adjust as needed)
 MAX_WORKERS = os.cpu_count() - 4 or 4
 TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
+
+# Scan ranges (set from CLI args in __main__)
+SCAN_START_A = SCAN_STOP_A = SCAN_STEP_A = 0.0
+SCAN_START_D = SCAN_STOP_D = SCAN_STEP_D = 0.0
 
 
 def run(cmd: str, cwd: Path) -> bool:
@@ -250,4 +242,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    args = get_args()
+    SCAN_START_A = args.startA
+    SCAN_STOP_A = args.stopA
+    SCAN_STEP_A = args.stepA
+    SCAN_START_D = args.startD
+    SCAN_STOP_D = args.stopD
+    SCAN_STEP_D = args.stepD
     main()
