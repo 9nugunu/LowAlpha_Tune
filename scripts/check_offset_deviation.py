@@ -1,16 +1,13 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
 import sys
-import os
 
-# Ensure project root is in path for imports
-sys.path.append(os.getcwd())
+# Project root on sys.path so `from src.xxx` works
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Import DIRECTLY from compare_offsets.py to share dynamic logic/params
-from compare_offsets import load_simulation_slice, theoretical_offsets_um, ensure_output_dir, DEFAULT_RUNFILENAME
+from scripts.compare_theory_vs_simulation import load_simulation_slice, theoretical_offsets_um, ensure_output_dir, DEFAULT_RUNFILENAME
 from src.config import LATEST_SCAN_DIR
 
 def check_offset_deviation():

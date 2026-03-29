@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import csv
 import sys
-import os
 
-# Add src to path for config
-sys.path.append(os.path.dirname(__file__))
-from config import *
-from visualization import PlotConfig
+# Project root on sys.path so `from src.xxx` works
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.config import (LATEST_SCAN_DIR, OUTPUT_ROOT, POS_SENSITIVITY,
+                        BUNCH_CHARGE_NC, IMPEDANCE, ASSUMED_NOISE_FLOOR)
+from src.visualization import PlotConfig
 
 # --- Matplotlib High-Visibility Settings ---
 PlotConfig(line_width=4).apply_settings()

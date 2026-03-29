@@ -2,11 +2,10 @@ import numpy as np
 import pandas as pd
 import scipy.special as sp
 import sys
-import os
 from pathlib import Path
 
-# Add src to path just in case
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Project root on sys.path so `from src.xxx` works
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.config import LATEST_SCAN_DIR, T_REV
 
 # --- Physics Constants (Copy from compare_offsets.py for standalone usage) ---

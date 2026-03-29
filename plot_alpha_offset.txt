@@ -1,0 +1,77 @@
+"""
+Plot x/z offsets versus momentum compaction (alphac) for a fixed delta slice.
+
+This reuses the scan grid definitions from result_elegant.py and the saved X/Z
+matrices in input/results/X.txt and Z.txt.
+"""
+
+from pathlib import Path
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Paths
+RESULT_DIR = Path("input/results")
+X_PATH = RESULT_DIR / "X.txt"
+Z_PATH = RESULT_DIR / "Z.txt"
+OUT_DIR = Path("output") / Path(__file__).stem
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Target delta (energy spread). Must lie on the stored grid.
+DELTA_TARGET = 2e-4
+
+
+def main() -> None:
+    if not X_PATH.exists() or not Z_PATH.exists():
+        raise SystemExit(f"Missing data files: {X_PATH} or {Z_PATH}")
+
+    # Grid definitions copied from result_elegant.py
+    scan_startD, scan_stopD, scan_stepD = 10 ** -4, 2.2 * 10 ** -4, 0.2 * 10 ** -5
+    scan_startA, scan_stopA, scan_stepA = 10 ** -5, 1.01 * 10 ** -4, 0.1 * 10 ** -5
+
+    alpha_new = np.arange(scan_startA, scan_stopA, scan_stepA) / 10 ** -4
+    delD_new = np.arange(scan_startD, scan_stopD, scan_stepD) / 10 ** -4
+
+    X = np.loadtxt(X_PATH)
+    Z = np.loadtxt(Z_PATH)
+
+    # Target delta (energy spread) and nearest index on the grid.
+    delta_target_norm = DELTA_TARGET / 10 ** -4  # normalize as in result_elegant.py
+    idx = int(np.argmin(np.abs(delD_new - delta_target_norm)))
+    if not np.isclose(delD_new[idx], delta_target_norm):
+        raise SystemExit(
+            f"Requested delta {DELTA_TARGET:.2e} not on grid. "
+            f"Available range: {delD_new.min()*1e-4:.2e}–{delD_new.max()*1e-4:.2e}"
+        )
+    delta_used = delD_new[idx] * 10 ** -4
+
+    x_offsets = X[idx, :]
+    z_offsets = Z[idx, :]
+
+    fig, ax = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+    ax[0].plot(alpha_new, x_offsets, color="tab:red", label="x offset")
+    ax[0].set_ylabel(r"x offset ($\mu$m)")
+    ax[0].grid(True, ls=":")
+    ax[0].legend()
+
+    ax[1].plot(alpha_new, z_offsets, color="tab:blue", label="z offset")
+    ax[1].set_xlabel(r"momentum compaction $\alpha_c \times 10^{-4}$")
+    ax[1].set_ylabel(r"z offset ($\mu$m)")
+    ax[1].grid(True, ls=":")
+    ax[1].legend()
+
+    fig.suptitle(f"Offsets vs. alphac for delta = {delta_used:.2e}")
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+
+    out_path = OUT_DIR / f"alphac_offsets_delta{DELTA_TARGET:.0e}.png"
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+
+    print(f"Saved plot to {out_path} (delta grid used: {delta_used:.2e})")
+    print(
+        f"Slice ranges - X: {x_offsets.min():.3f}..{x_offsets.max():.3f}, "
+        f"Z: {z_offsets.min():.3f}..{z_offsets.max():.3f}"
+    )
+
+
+if __name__ == "__main__":
+    main()

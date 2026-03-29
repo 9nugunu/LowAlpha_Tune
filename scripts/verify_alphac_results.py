@@ -1,7 +1,6 @@
 import sdds
 import subprocess
 import sys
-import os
 import json
 import re
 from pathlib import Path
@@ -11,9 +10,9 @@ from multiprocessing import Pool, cpu_count
 from functools import partial
 from tqdm import tqdm
 
-# Add src to path for config
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-from config import LATEST_SCAN_DIR
+# Project root on sys.path so `from src.xxx` works
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.config import LATEST_SCAN_DIR
 
 # ============================================================
 # Quick Debug Runner: Verify alphac and plot LPS distributions

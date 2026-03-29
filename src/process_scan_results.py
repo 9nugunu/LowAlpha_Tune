@@ -15,7 +15,7 @@ import re
 from scipy.fftpack import fft, fftshift, fftfreq, ifft, ifftshift
 from scipy.signal import find_peaks
 import pandas as pd
-from visualization import PlotConfig
+from src.visualization import PlotConfig
 
 # Plot style
 plt.switch_backend("Agg")

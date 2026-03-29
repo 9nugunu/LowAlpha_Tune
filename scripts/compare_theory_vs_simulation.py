@@ -12,17 +12,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.special as sp
 
-import os
 import sys
+from pathlib import Path
 
 # Non-interactive backend for headless runs.
 plt.switch_backend("Agg")
 
-# Add src to path for config
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
-from src.config import *
-
-
+# Project root on sys.path so `from src.xxx` works
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.config import (LATEST_SCAN_DIR, OUTPUT_ROOT, T_REV,
+                        POS_SENSITIVITY, BUNCH_CHARGE_NC, IMPEDANCE)
 from src.visualization import PlotConfig
 
 
