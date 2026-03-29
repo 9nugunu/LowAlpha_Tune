@@ -57,7 +57,7 @@ class MachineParams:
         self.V_rf = 0.5e6                 # V
         self.f_rf = 500e6                 # Hz
         self.w_rf = 2 * np.pi * self.f_rf # rad/s
-        self.e_x = 19e-9                 # m * rad
+        self.e_x = 190e-9                # m * rad
 
         # Derived
         self.phi_s = np.pi - np.arcsin(self.U_0 / self.V_rf)
