@@ -1,15 +1,13 @@
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
-
-plt.rcParams['axes.labelsize'] = 16
-plt.rcParams["axes.labelweight"] = "bold"
-plt.rcParams['font.weight']='bold'
-plt.rcParams['font.size'] = 12
-# plt.rcParams['image.cmap'] = 'gist_heat' 
-plt.rcParams['image.cmap'] = 'jet' 
-
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.visualization import PlotConfig
+
+PlotConfig(label_size=16, font_size=12, title_size=16, cmap='jet').apply_settings()
 
 # --- Path Configuration ---
 SCRIPT_DIR = Path(__file__).parent

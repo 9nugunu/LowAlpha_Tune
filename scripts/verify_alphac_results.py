@@ -13,6 +13,7 @@ from tqdm import tqdm
 # Project root on sys.path so `from src.xxx` works
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.config import LATEST_SCAN_DIR
+from src.visualization import PlotConfig, escape_latex
 
 # ============================================================
 # Quick Debug Runner: Verify alphac and plot LPS distributions
@@ -24,6 +25,7 @@ PYTHON_EXE = sys.executable
 
 # Non-interactive backend for multiprocessing
 plt.switch_backend("Agg")
+PlotConfig().apply_settings()
 
 
 def _verify_single_result(f_path):
@@ -187,7 +189,7 @@ def _plot_single_lps(args):
         
         fig, ax = plt.subplots(figsize=(8, 7))
         ax.scatter(dt_vals * 1e12, p_vals, s=2, alpha=0.5, color='red')
-        ax.set_title(f"Longitudinal Phase Space (LPS)\n{root}")
+        ax.set_title(f"Longitudinal Phase Space (LPS)\n{escape_latex(root)}")
         ax.set_xlabel("dt [ps]")
         ax.set_ylabel("p")
         ax.set_xlim(x_lims)

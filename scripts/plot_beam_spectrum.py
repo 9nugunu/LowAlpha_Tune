@@ -6,6 +6,13 @@ from pathlib import Path
 import os
 import argparse
 from scipy.signal import find_peaks
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+from src.visualization import PlotConfig, escape_latex
+
+PlotConfig().apply_settings()
 
 # --- Constants from MLS.py ---
 c0 = 299792458
@@ -137,7 +144,7 @@ def plot_spectrum(fpath):
             axes[0].axvspan(vx_det - vz_det - bw/2, vx_det - vz_det + bw/2, color='orange', alpha=0.2)
             axes[0].axvspan(vx_det + vz_det - bw/2, vx_det + vz_det + bw/2, color='orange', alpha=0.2)
 
-    axes[0].set_title(f"Horizontal Spectrum (X) - {fpath.name}")
+    axes[0].set_title(f"Horizontal Spectrum (X) - {escape_latex(fpath.name)}")
     axes[0].set_ylabel("Amplitude")
     axes[0].legend(loc='upper right', fontsize='small')
     axes[0].set_xlim(vx_det - 0.05, vx_det + 0.05) if vx_det > 0 else axes[0].set_xlim(0, 2)
@@ -150,7 +157,7 @@ def plot_spectrum(fpath):
         axes[1].axvline(vz_det, color='green', linestyle='--', label=f'vz={vz_det:.4e}')
         axes[1].axvspan(vz_det - bw/2, vz_det + bw/2, color='green', alpha=0.2)
 
-    axes[1].set_title(f"Longitudinal Spectrum (Z) - {fpath.name}")
+    axes[1].set_title(f"Longitudinal Spectrum (Z) - {escape_latex(fpath.name)}")
     axes[1].set_ylabel("Amplitude")
     axes[1].set_xlabel("Frequency [MHz]")
     axes[1].legend(loc='upper right', fontsize='small')

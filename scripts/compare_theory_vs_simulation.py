@@ -21,8 +21,8 @@ plt.switch_backend("Agg")
 # Project root on sys.path so `from src.xxx` works
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.config import (LATEST_SCAN_DIR, OUTPUT_ROOT, T_REV,
-                        POS_SENSITIVITY, BUNCH_CHARGE_NC, IMPEDANCE)
-from src.visualization import PlotConfig
+                        POS_SENSITIVITY, BUNCH_CHARGE_NC, IMPEDANCE, BEAM_CURRENT)
+from src.visualization import PlotConfig, apply_axis_style
 
 
 PLOT_CONFIG = PlotConfig()
@@ -68,11 +68,10 @@ PARAMS = MachineParams()
 
 
 def style_axes(axes):
-    """Apply minor ticks and grids to axes (works for single axis or array)."""
+    """Apply shared scaled styling to axes (works for single axis or array)."""
     for ax in np.ravel(np.atleast_1d(axes)):
-        ax.minorticks_on()
-        ax.grid(which="major", linestyle="-")
-        ax.grid(which="minor", linestyle=":", alpha=0.5)
+        figsize = tuple(ax.figure.get_size_inches())
+        apply_axis_style(ax, PLOT_CONFIG, figsize)
 
 
 def synchrotron_frequency(alpha, params=PARAMS):

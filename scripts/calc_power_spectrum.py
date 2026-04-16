@@ -8,13 +8,12 @@ import sys
 # Project root on sys.path so `from src.xxx` works
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.config import (LATEST_SCAN_DIR, OUTPUT_ROOT, POS_SENSITIVITY,
-                        BUNCH_CHARGE_NC, IMPEDANCE, ASSUMED_NOISE_FLOOR)
+                        BUNCH_CHARGE_NC, IMPEDANCE, ASSUMED_NOISE_FLOOR,
+                        BEAM_CURRENT)
+from src.visualization import PlotConfig
 
 # --- Matplotlib Settings ---
-plt.rcParams['font.family'] = 'Arial'
-plt.rcParams['font.weight'] = 'bold'
-plt.rcParams['axes.labelsize'] = 14
-plt.rcParams['axes.labelweight'] = 'bold'
+PlotConfig(label_size=14, font_size=14, title_size=16, legend_fontsize=12).apply_settings()
 plt.rcParams['xtick.labelsize'] = 12
 plt.rcParams['ytick.labelsize'] = 12
 plt.rcParams['grid.alpha'] = 0.3
@@ -77,7 +76,10 @@ plt.axhline(y=avg_sim_noise, color='green', linestyle=':', alpha=0.6, label=f'Si
 
 plt.xlabel(r'$\alpha_c$ index ($10^{-4}$)', fontsize=14)
 plt.ylabel('Power [dBm]', fontsize=14)
-plt.title(f'Power vs Alpha_c (Current={BEAM_CURRENT}uA, Sensitivity={POS_SENSITIVITY}mV/mm/nC)', fontsize=14)
+plt.title(
+    rf'Power vs. $\alpha_c$ (Current={BEAM_CURRENT}~uA, Sensitivity={POS_SENSITIVITY}~mV/mm/nC)',
+    fontsize=14,
+)
 plt.grid(True, which='both', linestyle=':', alpha=0.5)
 plt.legend(frameon=True, loc='best')
 
