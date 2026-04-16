@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+import subprocess
+import sys
+
+WINDOWS_EXE = "/mnt/c/texlive/2025/bin/windows/kpsewhich.exe"
+
+
+def to_wsl_path(path_str: str) -> str:
+    result = subprocess.run(
+        ["wslpath", "-u", path_str],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def main() -> None:
+    proc = subprocess.run(
+        [WINDOWS_EXE, *sys.argv[1:]],
+        capture_output=True,
+        text=True,
+    )
+
+    stdout_lines = []
+    for line in proc.stdout.splitlines():
+        stripped = line.strip()
+        if stripped and (":" in stripped or stripped.startswith("\\\\")):
+            try:
+                stdout_lines.append(to_wsl_path(stripped))
+            except subprocess.CalledProcessError:
+                stdout_lines.append(stripped)
+        else:
+            stdout_lines.append(stripped)
+
+    if stdout_lines:
+        print("\n".join(stdout_lines))
+    if proc.stderr:
+        print(proc.stderr, file=sys.stderr, end="")
+    raise SystemExit(proc.returncode)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+EXE_MAP = {
+    "latex": "/mnt/c/texlive/2025/bin/windows/latex.exe",
+    "dvipng": "/mnt/c/texlive/2025/bin/windows/dvipng.exe",
+    "dvisvgm": "/mnt/c/texlive/2025/bin/windows/dvisvgm.exe",
+}
+PATHLIKE_SUFFIXES = {
+    ".tex",
+    ".dvi",
+    ".png",
+    ".svg",
+    ".pdf",
+    ".ps",
+    ".eps",
+    ".aux",
+    ".log",
+}
+
+
+def to_windows_path(path_str: str) -> str:
+    candidate = Path(path_str)
+    if not candidate.is_absolute():
+        candidate = (Path.cwd() / candidate).resolve()
+    result = subprocess.run(
+        ["wslpath", "-w", str(candidate)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def looks_like_path(value: str) -> bool:
+    if not value or value.startswith("-"):
+        return False
+    if value.startswith("/"):
+        return True
+    candidate = Path(value)
+    return candidate.exists() or candidate.suffix.lower() in PATHLIKE_SUFFIXES
+
+
+def maybe_convert_arg(arg: str) -> str:
+    if "=" in arg and not arg.startswith("="):
+        prefix, value = arg.split("=", 1)
+        if looks_like_path(value):
+            return f"{prefix}={to_windows_path(value)}"
+        return arg
+    if looks_like_path(arg):
+        return to_windows_path(arg)
+    return arg
+
+
+def main() -> None:
+    command = Path(__file__).name
+    windows_exe = EXE_MAP[command]
+    args = [maybe_convert_arg(arg) for arg in sys.argv[1:]]
+    os.execv(windows_exe, [windows_exe, *args])
+
+
+if __name__ == "__main__":
+    main()
