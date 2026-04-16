@@ -47,3 +47,12 @@ data/
 *.sdds
 *.csv
 *~
+
+# Local caches and tooling artifacts
+.matplotlib/
+.omc/
+temp_*.txt
+debug_output*.txt
+plot_alpha_offset.txt
+dispersion*.txt
+*.pdf
