@@ -7,19 +7,22 @@ are updated for the new sweep (files like opt_A{alpha}_D{delta}_check.w2 under r
 
 import os
 from pathlib import Path
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
-import sdds
 import json
 import re
 from scipy.fftpack import fft, fftshift, fftfreq, ifft, ifftshift
 from scipy.signal import find_peaks
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 from src.visualization import PlotConfig
 
 # Plot style
 plt.switch_backend("Agg")
-config = PlotConfig(cmap='jet', font_size=20)
+config = PlotConfig(cmap='jet')
 config.apply_settings()
 
 c0 = 299792458
@@ -29,15 +32,75 @@ BASE_DIR = Path(__file__).parent
 PROJECT_ROOT = BASE_DIR.parent
 # OUT_DIR will be initialized after finding FDIR
 
+
+def style_axis(ax, figsize, *, title: str | None = None) -> dict[str, float]:
+    sizes = config.scaled_font_sizes(figsize)
+    ax.minorticks_on()
+    ax.grid(which='major', linestyle='-')
+    ax.grid(which='minor', linestyle=':', alpha=0.5)
+    ax.tick_params(axis='both', which='major', labelsize=sizes['tick'], width=2)
+    plt.setp(ax.get_xticklabels(), weight='bold')
+    plt.setp(ax.get_yticklabels(), weight='bold')
+    ax.xaxis.label.set_size(sizes['label'])
+    ax.yaxis.label.set_size(sizes['label'])
+    ax.xaxis.label.set_weight(config.font_weight)
+    ax.yaxis.label.set_weight(config.font_weight)
+    if config.show_title:
+        if title is not None:
+            ax.set_title(title)
+    else:
+        ax.set_title('')
+    ax.title.set_size(sizes['title'])
+    ax.title.set_weight(config.title_weight)
+    return sizes
+
+
+def style_colorbar(cbar, figsize, label: str) -> None:
+    sizes = config.scaled_font_sizes(figsize)
+    cbar.set_label(label, rotation=-90, labelpad=35, size=sizes['label'], weight=config.font_weight)
+    cbar.ax.tick_params(labelsize=sizes['tick'], width=2)
+    plt.setp(cbar.ax.get_yticklabels(), weight='bold')
+
+
+def get_contour_color_limits(X: np.ndarray, Z: np.ndarray, *, unify_individual_colorbar_range: bool) -> tuple[float | None, float | None]:
+    if not unify_individual_colorbar_range:
+        return None, None
+    return float(min(X.min(), Z.min())), float(max(X.max(), Z.max()))
+
+
+def build_contour_levels(
+    X: np.ndarray,
+    Z: np.ndarray,
+    *,
+    unify_individual_colorbar_range: bool,
+    n_levels: int = 100,
+) -> int | np.ndarray:
+    vmin, vmax = get_contour_color_limits(
+        X,
+        Z,
+        unify_individual_colorbar_range=unify_individual_colorbar_range,
+    )
+    if vmin is None or vmax is None:
+        return n_levels
+    return np.linspace(vmin, vmax, n_levels)
+
+
 import argparse
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Process scan results and plot contours.")
     parser.add_argument("--dir", type=str, default=None, help="Specific scan directory name to process.")
+    parser.add_argument(
+        "--unify-individual-colorbar-range",
+        action="store_true",
+        help="Use the same colorbar min/max for individual X and Z contour figures.",
+    )
     return parser.parse_args()
+
 
 # Set from CLI args in __main__
 TARGET_SCAN_DIR = None
+UNIFY_INDIVIDUAL_COLORBAR_RANGE = False
 
 
 def get_latest_scan_dir():
@@ -102,6 +165,8 @@ OUT_DIR = None
 
 
 def col_page(filename, column):
+    import sdds
+
     temp = sdds.SDDS(0)
     temp.load(str(filename))
     col_data = temp.columnData[temp.columnName.index(column)]
@@ -298,6 +363,7 @@ def amp_cal(p):
 if __name__ == "__main__":
     args = get_parser()
     TARGET_SCAN_DIR = args.dir
+    UNIFY_INDIVIDUAL_COLORBAR_RANGE = args.unify_individual_colorbar_range
     FDIR = get_latest_scan_dir()
     if FDIR:
         OUT_DIR = PROJECT_ROOT / "output" / Path(__file__).stem / FDIR.name
@@ -436,46 +502,63 @@ if __name__ == "__main__":
         print(f"X_side (sideband) saved to: {x_side_csv}")
 
     # Plot Z contour
-    fig, ax = plt.subplots(1, 1, figsize=(12, 9))
-    cp = ax.contourf(plotX, plotY, Z, levels=100)
+    individual_levels = build_contour_levels(
+        X,
+        Z,
+        unify_individual_colorbar_range=UNIFY_INDIVIDUAL_COLORBAR_RANGE,
+    )
+    individual_vmin, individual_vmax = get_contour_color_limits(
+        X,
+        Z,
+        unify_individual_colorbar_range=UNIFY_INDIVIDUAL_COLORBAR_RANGE,
+    )
+
+    z_figsize = (12, 9)
+    fig, ax = plt.subplots(1, 1, figsize=z_figsize)
+    cp = ax.contourf(plotX, plotY, Z, levels=individual_levels, vmin=individual_vmin, vmax=individual_vmax)
     cbar = fig.colorbar(cp)
-    cbar.set_label(r"offset ($\mu$m)")
-    plt.xlabel(r"momentum compaction factor $\times 10^{-4}$")
-    plt.ylabel(r"relative energy spread $\times 10^{-4}$")
+    style_colorbar(cbar, z_figsize, r"Offset ($\mu\mathrm{m}$)")
+    ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+    ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+    style_axis(ax, z_figsize)
     plt.tight_layout()
     fig.savefig(OUT_DIR / "Z_offset_contour.png", dpi=300)
 
     # Plot X contour
-    fig, ax = plt.subplots(1, 1, figsize=(12, 9))
-    cp = ax.contourf(plotX, plotY, X, levels=100)
+    x_figsize = (12, 9)
+    fig, ax = plt.subplots(1, 1, figsize=x_figsize)
+    cp = ax.contourf(plotX, plotY, X, levels=individual_levels, vmin=individual_vmin, vmax=individual_vmax)
     cbar = fig.colorbar(cp)
-    cbar.set_label(r"offset ($\mu$m)")
-    plt.xlabel(r"momentum compaction factor $\times 10^{-4}$")
-    plt.ylabel(r"relative energy spread $\times 10^{-4}$")
+    style_colorbar(cbar, x_figsize, r"Offset ($\mu\mathrm{m}$)")
+    ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+    ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+    style_axis(ax, x_figsize)
     plt.tight_layout()
     fig.savefig(OUT_DIR / "X_offset_contour.png", dpi=300)
 
     # Side-by-side with unified color scale
     vmin = min(X.min(), Z.min())
     vmax = max(X.max(), Z.max())
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
+    side_figsize = (14, 6)
+    fig, axes = plt.subplots(1, 2, figsize=side_figsize, sharey=True)
     cf1 = axes[0].contourf(plotX, plotY, Z, levels=100, vmin=vmin, vmax=vmax)
-    axes[0].set_title("Z offset")
-    axes[0].set_xlabel(r"$\alpha_c \times 10^{-4}$")
-    axes[0].set_ylabel(r"$\delta \times 10^{-4}$")
+    axes[0].set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+    axes[0].set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+    style_axis(axes[0], side_figsize, title=r"$Z$ offset")
     cf2 = axes[1].contourf(plotX, plotY, X, levels=100, vmin=vmin, vmax=vmax)
-    axes[1].set_title("X offset")
-    axes[1].set_xlabel(r"$\alpha_c \times 10^{-4}$")
+    axes[1].set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+    style_axis(axes[1], side_figsize, title=r"$X$ offset")
     fig.tight_layout(rect=(0, 0, 0.9, 1))
     cbar = fig.colorbar(cf1, ax=axes, fraction=0.046, pad=0.04)
-    cbar.set_label(r"offset ($\mu$m)")
+    style_colorbar(cbar, side_figsize, r"Offset ($\mu\mathrm{m}$)")
     fig.savefig(OUT_DIR / "XZ_offset_contour_side_by_side.png", dpi=300)
 
     # --- New: Plot Difference (X - Z) ---
     diff = X - Z
     max_abs = max(abs(diff.min()), abs(diff.max())) # For symmetric color scale
     
-    fig, ax = plt.subplots(1, 1, figsize=(12, 9))
+    diff_figsize = (12, 9)
+    fig, ax = plt.subplots(1, 1, figsize=diff_figsize)
     # 'seismic' provides very high contrast between blue (negative) and red (positive)
     cp = ax.contourf(plotX, plotY, diff, levels=100, cmap='seismic', vmin=-max_abs, vmax=max_abs)
 
@@ -485,6 +568,7 @@ if __name__ == "__main__":
     # Place labels at specific coordinates to widen the interval
     # We pick points where diff is near 0
     zi = np.where(np.abs(diff) < np.nanpercentile(np.abs(diff), 2))
+    zero_label_size = config.scaled_font_sizes(diff_figsize)['legend']
     if len(zi[0]) > 20:
         # Pick two points (roughly 1/4 and 3/4 along the detected indices)
         p1_idx = len(zi[0]) // 14
@@ -493,19 +577,19 @@ if __name__ == "__main__":
             (plotX[zi[0][p1_idx], zi[1][p1_idx]], plotY[zi[0][p1_idx], zi[1][p1_idx]]),
             (plotX[zi[0][p2_idx], zi[1][p2_idx]], plotY[zi[0][p2_idx], zi[1][p2_idx]])
         ]
-        texts = ax.clabel(zero_contour, inline=True, fontsize=18, fmt={0.0: '0'}, manual=label_locs)
+        texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'}, manual=label_locs)
         for t in texts:
             t.set_rotation(0)
     else:
-        texts = ax.clabel(zero_contour, inline=True, fontsize=18, fmt={0.0: '0'})
+        texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'})
         for t in texts:
             t.set_rotation(0)
     
     cbar = fig.colorbar(cp)
-    cbar.set_label(r"$\Delta x-\Delta z$ ($\mu$m)", rotation=270, labelpad=20)
-    ax.set_title("Comparison of X and Z amplitudes")
-    ax.set_xlabel(r"$\alpha_c \times 10^{-4}$")
-    ax.set_ylabel(r"$\delta \times 10^{-4}$")
+    style_colorbar(cbar, diff_figsize, r"$\Delta x - \Delta z$ ($\mu\mathrm{m}$)")
+    ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+    ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+    style_axis(ax, diff_figsize, title=r"Comparison of $X$ and $Z$ amplitudes")
     plt.tight_layout()
     fig.savefig(OUT_DIR / "XZ_diff_contour.png", dpi=300)
     print(f"Difference map saved to: {OUT_DIR / 'XZ_diff_contour.png'}")
