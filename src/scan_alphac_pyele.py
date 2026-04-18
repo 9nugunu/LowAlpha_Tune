@@ -1,6 +1,7 @@
 import concurrent.futures
 from pathlib import Path
 import subprocess
+import locale
 import numpy as np
 import os
 import shutil
@@ -61,6 +62,29 @@ TEST_MAX_STEPS = 2
 SCAN_CONFIG = DEFAULT_SCAN_CONFIG
 
 
+def _decode_output(data: bytes | None) -> str:
+    if not data:
+        return ""
+
+    encoding_order = (
+        locale.getpreferredencoding(False),
+        "utf-8",
+        "cp949",
+        "cp1252",
+        "latin1",
+    )
+    for encoding in dict.fromkeys(encoding_order):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def _elegant_available() -> bool:
+    return shutil.which(ELEGANT_CMD) is not None
+
+
 def run(cmd: str, cwd: Path) -> bool:
     """Run a shell command in specified cwd, return True if successful."""
     print(f"Running: {cmd} (cwd={cwd})")
@@ -76,9 +100,9 @@ def run(cmd: str, cwd: Path) -> bool:
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {e}")
         if e.stdout:
-            print(f"Stdout: {e.stdout.decode('utf-8', errors='replace')}")
+            print(f"Stdout: {_decode_output(e.stdout)}")
         if e.stderr:
-            print(f"Stderr: {e.stderr.decode('utf-8', errors='replace')}")
+            print(f"Stderr: {_decode_output(e.stderr)}")
         return False
 
 
@@ -208,6 +232,11 @@ def run_checks(rootnames: list[str], work_dir: Path) -> None:
 
 
 def main() -> None:
+    if not _elegant_available():
+        print("ERROR: 'elegant' was not found on PATH.")
+        print("Install Elegant and register it to PATH, then retry.")
+        return
+
     # 1. Create session directory based on scan ranges
     session_dir = RESULTS_BASE_DIR / SCAN_CONFIG.session_dir_name()
     session_dir.mkdir(parents=True, exist_ok=True)
