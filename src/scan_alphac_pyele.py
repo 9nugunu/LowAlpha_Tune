@@ -271,12 +271,22 @@ def main() -> None:
         "run0.new", "run0.twi", 
         OPT_FILE_NAME, CHECK_FILE_NAME, LTE_FILE_NAME
     ]
+    missing_files: list[str] = []
     for filename in required_files:
         src = resolve_source_file(filename)
         if src is not None and src.exists():
-            shutil.copy(src, session_dir)
+            shutil.copy2(src, session_dir)
+            print(f"Copied {filename} from {src}")
         else:
-            print(f"Warning: {filename} not found in {SRC_DIR}")
+            missing_files.append(filename)
+
+    if missing_files:
+        print("ERROR: Required Elegant input files are missing.")
+        for filename in missing_files:
+            print(f"  - {filename}")
+        print(f"Searched in: {SRC_DIR}")
+        print(f"Searched in: {FALLBACK_INPUT_DIR}")
+        return
 
     # 3. Execute sweep and checks with strict verification
     success_opt_roots = sweep_optics(session_dir)
