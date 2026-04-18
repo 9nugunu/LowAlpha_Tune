@@ -24,6 +24,7 @@ def get_args(argv: list[str] | None = None):
     parser.add_argument("--startD", type=float, default=DEFAULT_SCAN_CONFIG.startD)
     parser.add_argument("--stopD", type=float, default=DEFAULT_SCAN_CONFIG.stopD)
     parser.add_argument("--stepD", type=float, default=DEFAULT_SCAN_CONFIG.stepD)
+    parser.add_argument("--rpn-defns", default=os.environ.get("RPN_DEFNS"))
     return parser.parse_args(argv)
 
 
@@ -49,10 +50,12 @@ BASE_DIR = Path(__file__).parent
 SRC_DIR = BASE_DIR
 PROJECT_ROOT = BASE_DIR.parent
 ELEGANT_CMD = "elegant"
+FALLBACK_INPUT_DIR = PROJECT_ROOT / "input" / "MLS_tune_elegant"
 OPT_FILE_NAME = "opt.ele"
 CHECK_FILE_NAME = "check.ele"
 LTE_FILE_NAME = "mlsLA.LTE"
 RESULTS_BASE_DIR = PROJECT_ROOT / "output" / "scan_alphac_pyele"
+DEFAULT_RPN_DEFNS_FILE = "run0.twi"
 
 # parallel workers for sweep (adjust as needed)
 MAX_WORKERS = os.cpu_count() - 4 or 4
@@ -60,6 +63,32 @@ TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
 
 SCAN_CONFIG = DEFAULT_SCAN_CONFIG
+RPN_DEFNS_PATH: str | None = None
+
+
+def resolve_source_file(name: str) -> Path | None:
+    """Find required files from known input roots."""
+    for root in (SRC_DIR, FALLBACK_INPUT_DIR):
+        candidate = root / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def resolve_rpn_defns_path(cli_override: str | None) -> str | None:
+    if cli_override:
+        return cli_override
+
+    env_path = os.environ.get("RPN_DEFNS")
+    if env_path:
+        return env_path
+
+    fallback = FALLBACK_INPUT_DIR / DEFAULT_RPN_DEFNS_FILE
+    if fallback.exists():
+        print(f"RPN_DEFNS is not set. Using fallback: {fallback}")
+        return str(fallback)
+
+    return None
 
 
 def _decode_output(data: bytes | None) -> str:
@@ -87,10 +116,13 @@ def _elegant_available() -> bool:
 
 def run(cmd: str, cwd: Path) -> bool:
     """Run a shell command in specified cwd, return True if successful."""
-    print(f"Running: {cmd} (cwd={cwd})")
+    full_cmd = cmd
+    if RPN_DEFNS_PATH:
+        full_cmd = f"{cmd} -rpnDefns={RPN_DEFNS_PATH}"
+    print(f"Running: {full_cmd} (cwd={cwd})")
     try:
         subprocess.run(
-            cmd,
+            full_cmd,
             shell=True,
             check=True,
             cwd=cwd,
@@ -232,6 +264,26 @@ def run_checks(rootnames: list[str], work_dir: Path) -> None:
 
 
 def main() -> None:
+    global RPN_DEFNS_PATH
+    global SCAN_CONFIG
+    args = get_args()
+    SCAN_CONFIG = ScanConfig(
+        startA=args.startA,
+        stopA=args.stopA,
+        stepA=args.stepA,
+        startD=args.startD,
+        stopD=args.stopD,
+        stepD=args.stepD,
+    )
+    RPN_DEFNS_PATH = resolve_rpn_defns_path(args.rpn_defns)
+    if not RPN_DEFNS_PATH:
+        print("ERROR: RPN_DEFNS is not set and no fallback input file was found.")
+        print("Set RPN_DEFNS or pass --rpn-defns <path_to_rpn_file>.")
+        return
+    if not Path(RPN_DEFNS_PATH).exists():
+        print(f"ERROR: RPN_DEFNS path does not exist: {RPN_DEFNS_PATH}")
+        return
+
     if not _elegant_available():
         print("ERROR: 'elegant' was not found on PATH.")
         print("Install Elegant and register it to PATH, then retry.")
@@ -254,8 +306,8 @@ def main() -> None:
         OPT_FILE_NAME, CHECK_FILE_NAME, LTE_FILE_NAME
     ]
     for filename in required_files:
-        src = SRC_DIR / filename
-        if src.exists():
+        src = resolve_source_file(filename)
+        if src is not None and src.exists():
             shutil.copy(src, session_dir)
         else:
             print(f"Warning: {filename} not found in {SRC_DIR}")
@@ -273,13 +325,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    args = get_args()
-    SCAN_CONFIG = ScanConfig(
-        startA=args.startA,
-        stopA=args.stopA,
-        stepA=args.stepA,
-        startD=args.startD,
-        stopD=args.stopD,
-        stepD=args.stepD,
-    )
     main()

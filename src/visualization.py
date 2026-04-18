@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import shutil
 from typing import Dict, Tuple
 
 import matplotlib.pyplot as plt
@@ -12,7 +13,7 @@ TEX_CACHE_DIR = MPL_CACHE_DIR / "tex.cache"
 TEX_WRAPPER_DIR = PROJECT_ROOT / "tools" / "wsl_texlive_bin"
 
 
-def ensure_tex_tool_path() -> None:
+def ensure_tex_tool_path() -> bool:
     wrapper_dir = str(TEX_WRAPPER_DIR)
     current_path = os.environ.get("PATH", "")
     path_entries = current_path.split(os.pathsep) if current_path else []
@@ -23,6 +24,7 @@ def ensure_tex_tool_path() -> None:
     TEX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     os.environ["MPLCONFIGDIR"] = str(MPL_CACHE_DIR)
     texmanager.TexManager._texcache = str(TEX_CACHE_DIR)
+    return shutil.which("latex") is not None
 
 
 def escape_latex(text: str) -> str:
@@ -89,8 +91,11 @@ class PlotConfig:
     ref_area: float = 10.0 * 8.0
 
     def apply_settings(self) -> None:
-        if self.use_tex:
-            ensure_tex_tool_path()
+        use_tex = self.use_tex and ensure_tex_tool_path()
+        if self.use_tex and not use_tex:
+            print("Warning: latex was not found on PATH. Falling back to matplotlib mathtext.")
+
+        if use_tex:
             plt.rcParams["text.usetex"] = True
             plt.rcParams["font.family"] = "serif"
             plt.rcParams["font.serif"] = ["Computer Modern Roman", "DejaVu Serif"]
@@ -105,6 +110,7 @@ class PlotConfig:
             )
         else:
             plt.rcParams["text.usetex"] = False
+            plt.rcParams["text.latex.preamble"] = ""
             plt.rcParams["font.family"] = "sans-serif"
             plt.rcParams["font.sans-serif"] = [
                 "Arial",
