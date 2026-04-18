@@ -9,6 +9,7 @@ import json
 import argparse
 import time
 import sys
+import shlex
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -77,74 +78,68 @@ def resolve_source_file(name: str) -> Path | None:
 
 def resolve_rpn_defns_path(cli_override: str | None) -> str | None:
     if cli_override:
-        return cli_override
+        return str(Path(cli_override).expanduser().resolve())
 
     env_path = os.environ.get("RPN_DEFNS")
     if env_path:
-        return env_path
+        return str(Path(env_path).expanduser().resolve())
 
     fallback = FALLBACK_INPUT_DIR / DEFAULT_RPN_DEFNS_FILE
     if fallback.exists():
         print(f"RPN_DEFNS is not set. Using fallback: {fallback}")
-        return str(fallback)
+        return str(fallback.resolve())
 
     return None
 
 
-def _decode_output(data: bytes | None) -> str:
-    if not data:
-        return ""
-
-    encoding_order = (
-        locale.getpreferredencoding(False),
-        "utf-8",
-        "cp949",
-        "cp1252",
-        "latin1",
-    )
-    for encoding in dict.fromkeys(encoding_order):
-        try:
-            return data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace")
+def _format_command(cmd: list[str]) -> str:
+    if os.name == "nt":
+        return subprocess.list2cmdline(cmd)
+    return shlex.join(cmd)
 
 
 def _elegant_available() -> bool:
     return shutil.which(ELEGANT_CMD) is not None
 
 
-def run(cmd: str, cwd: Path) -> bool:
-    """Run a shell command in specified cwd, return True if successful."""
-    full_cmd = cmd
+def run(cmd: list[str], cwd: Path) -> bool:
+    """Run a command in specified cwd, return True if successful."""
+    env = os.environ.copy()
+    full_cmd = list(cmd)
     if RPN_DEFNS_PATH:
-        full_cmd = f"{cmd} -rpnDefns={RPN_DEFNS_PATH}"
-    print(f"Running: {full_cmd} (cwd={cwd})")
+        env["RPN_DEFNS"] = RPN_DEFNS_PATH
+        full_cmd.append(f"-rpnDefns={RPN_DEFNS_PATH}")
+
+    print(f"Running: {_format_command(full_cmd)} (cwd={cwd})")
     try:
         subprocess.run(
             full_cmd,
-            shell=True,
             check=True,
             cwd=cwd,
             capture_output=True,
+            text=True,
+            encoding=locale.getpreferredencoding(False) or "utf-8",
+            errors="replace",
+            env=env,
         )
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {e}")
         if e.stdout:
-            print(f"Stdout: {_decode_output(e.stdout)}")
+            print(f"Stdout: {e.stdout}")
         if e.stderr:
-            print(f"Stderr: {_decode_output(e.stderr)}")
+            print(f"Stderr: {e.stderr}")
         return False
 
 
 def run_opt_task(alpha_target: float, delta_target: float, work_dir: Path) -> tuple[str, bool]:
     """Run a single optimization job and return (rootname, success)."""
     rootname = f"opt_A{alpha_target:.2e}_D{delta_target:.2e}"
-    cmd = (
-        f"{ELEGANT_CMD} {OPT_FILE_NAME} "
-        f"-macro=rootname={rootname},APVAL={alpha_target:.6e},DELTA={delta_target:.6e}"
-    )
+    cmd = [
+        ELEGANT_CMD,
+        OPT_FILE_NAME,
+        f"-macro=rootname={rootname},APVAL={alpha_target:.6e},DELTA={delta_target:.6e}",
+    ]
     success = run(cmd, cwd=work_dir)
     # Verification: Does the lattice file exist? (Matching opt.ele: <rootname>_opt.new)
     if success and not (work_dir / f"{rootname}_opt.new").exists():
@@ -209,9 +204,13 @@ def run_single_check(rootname: str, work_dir: Path) -> bool:
     except Exception:
         pass
 
-    cmd = f"{ELEGANT_CMD} {CHECK_FILE_NAME} -macro=lattice={lattice_file.name},rootname={rootname}"
+    cmd = [
+        ELEGANT_CMD,
+        CHECK_FILE_NAME,
+        f"-macro=lattice={lattice_file.name},rootname={rootname}",
+    ]
     if delta_target is not None:
-        cmd += f",DELTA={delta_target:.6e}"
+        cmd[-1] += f",DELTA={delta_target:.6e}"
     
     success = run(cmd, cwd=work_dir)
     

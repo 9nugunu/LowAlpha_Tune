@@ -14,11 +14,13 @@ TEX_WRAPPER_DIR = PROJECT_ROOT / "tools" / "wsl_texlive_bin"
 
 
 def ensure_tex_tool_path() -> bool:
-    wrapper_dir = str(TEX_WRAPPER_DIR)
-    current_path = os.environ.get("PATH", "")
-    path_entries = current_path.split(os.pathsep) if current_path else []
-    if wrapper_dir not in path_entries:
-        os.environ["PATH"] = os.pathsep.join([wrapper_dir, *path_entries]) if path_entries else wrapper_dir
+    # The WSL TeX wrappers are only relevant on Windows; Linux should use the native PATH.
+    if os.name == "nt" and TEX_WRAPPER_DIR.exists():
+        wrapper_dir = str(TEX_WRAPPER_DIR)
+        current_path = os.environ.get("PATH", "")
+        path_entries = current_path.split(os.pathsep) if current_path else []
+        if wrapper_dir not in path_entries:
+            os.environ["PATH"] = os.pathsep.join([wrapper_dir, *path_entries]) if path_entries else wrapper_dir
 
     MPL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     TEX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
