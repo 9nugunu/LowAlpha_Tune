@@ -1,0 +1,9 @@
+numpy
+scipy
+pandas
+matplotlib
+tqdm
+sdds
+
+# Test-only dependencies
+pytest
