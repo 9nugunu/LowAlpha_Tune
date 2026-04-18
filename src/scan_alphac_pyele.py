@@ -25,7 +25,6 @@ def get_args(argv: list[str] | None = None):
     parser.add_argument("--startD", type=float, default=DEFAULT_SCAN_CONFIG.startD)
     parser.add_argument("--stopD", type=float, default=DEFAULT_SCAN_CONFIG.stopD)
     parser.add_argument("--stepD", type=float, default=DEFAULT_SCAN_CONFIG.stepD)
-    parser.add_argument("--rpn-defns", default=os.environ.get("RPN_DEFNS"))
     return parser.parse_args(argv)
 
 
@@ -63,7 +62,6 @@ TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
 
 SCAN_CONFIG = DEFAULT_SCAN_CONFIG
-RPN_DEFNS_PATH: str | None = None
 
 
 def resolve_source_file(name: str) -> Path | None:
@@ -72,17 +70,6 @@ def resolve_source_file(name: str) -> Path | None:
         candidate = root / name
         if candidate.exists():
             return candidate
-    return None
-
-
-def resolve_rpn_defns_path(cli_override: str | None) -> str | None:
-    if cli_override:
-        return str(Path(cli_override).expanduser().resolve())
-
-    env_path = os.environ.get("RPN_DEFNS")
-    if env_path:
-        return str(Path(env_path).expanduser().resolve())
-
     return None
 
 
@@ -98,11 +85,7 @@ def _elegant_available() -> bool:
 
 def run(cmd: list[str], cwd: Path) -> bool:
     """Run a command in specified cwd, return True if successful."""
-    env = os.environ.copy()
     full_cmd = list(cmd)
-    if RPN_DEFNS_PATH:
-        env["RPN_DEFNS"] = RPN_DEFNS_PATH
-        full_cmd.append(f"-rpnDefns={RPN_DEFNS_PATH}")
 
     print(f"Running: {_format_command(full_cmd)} (cwd={cwd})")
     try:
@@ -114,7 +97,6 @@ def run(cmd: list[str], cwd: Path) -> bool:
             text=True,
             encoding=locale.getpreferredencoding(False) or "utf-8",
             errors="replace",
-            env=env,
         )
         return True
     except subprocess.CalledProcessError as e:
@@ -257,7 +239,6 @@ def run_checks(rootnames: list[str], work_dir: Path) -> None:
 
 
 def main() -> None:
-    global RPN_DEFNS_PATH
     global SCAN_CONFIG
     args = get_args()
     SCAN_CONFIG = ScanConfig(
@@ -268,14 +249,6 @@ def main() -> None:
         stopD=args.stopD,
         stepD=args.stepD,
     )
-    RPN_DEFNS_PATH = resolve_rpn_defns_path(args.rpn_defns)
-    if RPN_DEFNS_PATH and not Path(RPN_DEFNS_PATH).exists():
-        print(f"ERROR: RPN_DEFNS path does not exist: {RPN_DEFNS_PATH}")
-        return
-    if RPN_DEFNS_PATH:
-        print(f"Using RPN_DEFNS: {RPN_DEFNS_PATH}")
-    else:
-        print("RPN_DEFNS override not provided. Using the current process environment as-is.")
 
     if not _elegant_available():
         print("ERROR: 'elegant' was not found on PATH.")
