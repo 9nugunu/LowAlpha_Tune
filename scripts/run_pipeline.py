@@ -1,29 +1,22 @@
 import subprocess
 import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.config import DEFAULT_SCAN_CONFIG
+
 # ==========================================
 # 통합 시뮬레이션 & 분석 파이프라인 (Master)
 # ==========================================
-
-# 1. 스캔 범위 설정
-# 부동소수점 오차 방지를 위해 값을 명확히 정의
-SCAN_CONFIG = {
-    "startA": round(10e-6, 12),
-    "stopA": round(10e-5, 12),
-    "stepA": round(1e-6, 12),
-    "startD": round(1.0e-5, 12),
-    "stopD": round(2.2e-5, 12),
-    "stepD": round(0.2e-6, 12)
-}
 
 PYTHON_EXE = sys.executable  # 현재 가상환경의 파이썬 사용
 
 
 def get_session_dir_name() -> str:
-    """Build the simulation session directory name using the same format as scan_alphac_pyele.py."""
-    a_range = f"A{SCAN_CONFIG['startA']:.2e}-{SCAN_CONFIG['stopA']:.2e}"
-    d_range = f"D{SCAN_CONFIG['startD']:.2e}-{SCAN_CONFIG['stopD']:.2e}"
-    return f"scan_{a_range}_{d_range}"
+    """Build the default simulation session directory name from central config."""
+    return DEFAULT_SCAN_CONFIG.session_dir_name()
 
 def run_simulation():
     """단계 1: Elegant 시뮬레이션을 실행하여 데이터 생성"""
@@ -33,12 +26,12 @@ def run_simulation():
     
     cmd = [
         PYTHON_EXE, "src/scan_alphac_pyele.py",
-        "--startA", str(SCAN_CONFIG["startA"]),
-        "--stopA", str(SCAN_CONFIG["stopA"]),
-        "--stepA", str(SCAN_CONFIG["stepA"]),
-        "--startD", str(SCAN_CONFIG["startD"]),
-        "--stopD", str(SCAN_CONFIG["stopD"]),
-        "--stepD", str(SCAN_CONFIG["stepD"])
+        "--startA", str(DEFAULT_SCAN_CONFIG.startA),
+        "--stopA", str(DEFAULT_SCAN_CONFIG.stopA),
+        "--stepA", str(DEFAULT_SCAN_CONFIG.stepA),
+        "--startD", str(DEFAULT_SCAN_CONFIG.startD),
+        "--stopD", str(DEFAULT_SCAN_CONFIG.stopD),
+        "--stepD", str(DEFAULT_SCAN_CONFIG.stepD)
     ]
     
     # 프로세스 실행 및 출력 실시간 표시

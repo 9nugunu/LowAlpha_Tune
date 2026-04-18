@@ -18,6 +18,13 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+from src.config import (
+    DEFAULT_SCAN_CONFIG,
+    SCAN_FOLDER_NAME,
+    ScanConfig,
+    build_scan_axis,
+    scan_config_from_metadata,
+)
 from src.visualization import PlotConfig
 
 # Plot style
@@ -87,15 +94,20 @@ def build_contour_levels(
 
 import argparse
 
-def get_parser():
+def get_parser(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Process scan results and plot contours.")
-    parser.add_argument("--dir", type=str, default=None, help="Specific scan directory name to process.")
+    parser.add_argument(
+        "--dir",
+        type=str,
+        default=SCAN_FOLDER_NAME,
+        help="Specific scan directory name to process. Defaults to src.config.SCAN_FOLDER_NAME.",
+    )
     parser.add_argument(
         "--unify-individual-colorbar-range",
         action="store_true",
         help="Use the same colorbar min/max for individual X and Z contour figures.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 # Set from CLI args in __main__
@@ -104,7 +116,7 @@ UNIFY_INDIVIDUAL_COLORBAR_RANGE = False
 
 
 def get_latest_scan_dir():
-    """Find the specified or most recently modified directory starting with 'scan_'."""
+    """Find the configured/specified or most recently modified directory starting with 'scan_'."""
     # Define potential search paths for scan results
     search_paths = [
         PROJECT_ROOT / "scan_elegant" / "results",
@@ -134,16 +146,13 @@ def get_latest_scan_dir():
     return max(all_scans, key=os.path.getmtime)
 
 
-def load_metadata(fdir: Path):
+def load_metadata(fdir: Path) -> ScanConfig | None:
     """Load scan parameters from metadata.json or fallback to directory name parsing."""
     meta_path = fdir / "metadata.json"
     if meta_path.exists():
         with open(meta_path, "r") as f:
             meta = json.load(f)
-            return (
-                meta.get("SCAN_START_A"), meta.get("SCAN_STOP_A"), meta.get("SCAN_STEP_A"),
-                meta.get("SCAN_START_D"), meta.get("SCAN_STOP_D"), meta.get("SCAN_STEP_D")
-            )
+            return scan_config_from_metadata(meta)
     
     # Fallback: Parse from directory name
     number = r"[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?"
@@ -151,9 +160,13 @@ def load_metadata(fdir: Path):
     match = re.search(pattern, fdir.name)
     if match:
         try:
-            return (
-                float(match.group(1)), float(match.group(2)), 1e-6, # Default step if missing
-                float(match.group(3)), float(match.group(4)), 0.2e-6 # Default step if missing
+            return ScanConfig(
+                startA=float(match.group(1)),
+                stopA=float(match.group(2)),
+                stepA=DEFAULT_SCAN_CONFIG.stepA,
+                startD=float(match.group(3)),
+                stopD=float(match.group(4)),
+                stepD=DEFAULT_SCAN_CONFIG.stepD,
             )
         except ValueError:
             pass
@@ -185,9 +198,9 @@ def infer_scan_axes_from_files(fdir: Path) -> tuple[np.ndarray, np.ndarray] | No
     return np.array(sorted(alpha_values), dtype=float), np.array(sorted(delta_values), dtype=float)
 
 
-def build_scan_axis(start: float, stop: float, step: float) -> np.ndarray:
-    """Build a scan axis using the same inclusive endpoint logic as scan_alphac_pyele.py."""
-    return np.round(np.arange(start, stop + step / 100, step), 12)
+def resolve_scan_config(fdir: Path) -> ScanConfig:
+    """Resolve scan parameters from metadata/directory name or fall back to config defaults."""
+    return load_metadata(fdir) or DEFAULT_SCAN_CONFIG
 
 
 # Initialized in __main__
@@ -412,20 +425,15 @@ if __name__ == "__main__":
 
     # Attempt to load scan ranges automatically
     params = load_metadata(FDIR)
-    if params:
-        scan_startA, scan_stopA, scan_stepA, scan_startD, scan_stopD, scan_stepD = params
-    else:
-        # Final fallback to manual values if everything else fails
-        scan_startA, scan_stopA, scan_stepA = 10**-5, 1.01*10**-4, 0.1*10**-5
-        scan_startD, scan_stopD, scan_stepD = 1.4*10**-5, 2.6*10**-5, 0.2*10**-6
+    scan_config = params or DEFAULT_SCAN_CONFIG
 
     display_scale = 10**-4
     inferred_axes = infer_scan_axes_from_files(FDIR)
     if inferred_axes:
         alpha_axis_raw, delta_axis_raw = inferred_axes
         if params:
-            meta_alpha = build_scan_axis(scan_startA, scan_stopA, scan_stepA)
-            meta_delta = build_scan_axis(scan_startD, scan_stopD, scan_stepD)
+            meta_alpha = build_scan_axis(scan_config.startA, scan_config.stopA, scan_config.stepA)
+            meta_delta = build_scan_axis(scan_config.startD, scan_config.stopD, scan_config.stepD)
             if len(meta_alpha) != len(alpha_axis_raw) or len(meta_delta) != len(delta_axis_raw):
                 print("Metadata grid does not match available files. Using file-inferred grid.")
             else:
@@ -438,14 +446,14 @@ if __name__ == "__main__":
             f" D={delta_axis_raw[0]:.2e}..{delta_axis_raw[-1]:.2e} ({len(delta_axis_raw)} points)"
         )
     else:
-        alpha_axis_raw = build_scan_axis(scan_startA, scan_stopA, scan_stepA)
-        delta_axis_raw = build_scan_axis(scan_startD, scan_stopD, scan_stepD)
+        alpha_axis_raw = build_scan_axis(scan_config.startA, scan_config.stopA, scan_config.stepA)
+        delta_axis_raw = build_scan_axis(scan_config.startD, scan_config.stopD, scan_config.stepD)
         if params:
             print("Ranges auto-detected from metadata:")
-            print(f"  A: {scan_startA:.2e} to {scan_stopA:.2e} (step: {scan_stepA:.2e})")
-            print(f"  D: {scan_startD:.2e} to {scan_stopD:.2e} (step: {scan_stepD:.2e})")
+            print(f"  A: {scan_config.startA:.2e} to {scan_config.stopA:.2e} (step: {scan_config.stepA:.2e})")
+            print(f"  D: {scan_config.startD:.2e} to {scan_config.stopD:.2e} (step: {scan_config.stepD:.2e})")
         else:
-            print("Using hardcoded fallback ranges.")
+            print("Using src.config default scan ranges.")
 
     alpha_new = np.round(alpha_axis_raw / display_scale, 6)
     delD_new = np.round(delta_axis_raw / display_scale, 6)

@@ -9,16 +9,21 @@ import argparse
 import time
 import sys
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-def get_args():
+from src.config import DEFAULT_SCAN_CONFIG, ScanConfig, build_scan_axis
+
+
+def get_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Scan AlphaC and Delta parameters.")
-    parser.add_argument("--startA", type=float, default=10**-5)
-    parser.add_argument("--stopA", type=float, default=10**-4)
-    parser.add_argument("--stepA", type=float, default=0.1*10**-5)
-    parser.add_argument("--startD", type=float, default=2.6*10**-5)
-    parser.add_argument("--stopD", type=float, default=3.2*10**-5)
-    parser.add_argument("--stepD", type=float, default=0.2*10**-6)
-    return parser.parse_args()
+    parser.add_argument("--startA", type=float, default=DEFAULT_SCAN_CONFIG.startA)
+    parser.add_argument("--stopA", type=float, default=DEFAULT_SCAN_CONFIG.stopA)
+    parser.add_argument("--stepA", type=float, default=DEFAULT_SCAN_CONFIG.stepA)
+    parser.add_argument("--startD", type=float, default=DEFAULT_SCAN_CONFIG.startD)
+    parser.add_argument("--stopD", type=float, default=DEFAULT_SCAN_CONFIG.stopD)
+    parser.add_argument("--stepD", type=float, default=DEFAULT_SCAN_CONFIG.stepD)
+    return parser.parse_args(argv)
 
 
 def safe_rename(src: Path, dst: Path, retries: int = 5, delay: float = 0.5):
@@ -53,9 +58,7 @@ MAX_WORKERS = os.cpu_count() - 4 or 4
 TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
 
-# Scan ranges (set from CLI args in __main__)
-SCAN_START_A = SCAN_STOP_A = SCAN_STEP_A = 0.0
-SCAN_START_D = SCAN_STOP_D = SCAN_STEP_D = 0.0
+SCAN_CONFIG = DEFAULT_SCAN_CONFIG
 
 
 def run(cmd: str, cwd: Path) -> bool:
@@ -88,8 +91,8 @@ def run_opt_task(alpha_target: float, delta_target: float, work_dir: Path) -> tu
 
 def sweep_optics(work_dir: Path) -> list[str]:
     """Run the optimization scan and return generated root paths that succeeded."""
-    alpha_values = np.round(np.arange(SCAN_START_A, SCAN_STOP_A + SCAN_STEP_A / 100, SCAN_STEP_A), 10)
-    delta_values = np.round(np.arange(SCAN_START_D, SCAN_STOP_D + SCAN_STEP_D / 100, SCAN_STEP_D), 10)
+    alpha_values = build_scan_axis(SCAN_CONFIG.startA, SCAN_CONFIG.stopA, SCAN_CONFIG.stepA)
+    delta_values = build_scan_axis(SCAN_CONFIG.startD, SCAN_CONFIG.stopD, SCAN_CONFIG.stepD)
     # Ensure coordinates are clean rounded floats
     tasks = [(round(float(a), 12), round(float(d), 12)) for a in alpha_values for d in delta_values]
 
@@ -198,22 +201,13 @@ def run_checks(rootnames: list[str], work_dir: Path) -> None:
 
 def main() -> None:
     # 1. Create session directory based on scan ranges
-    a_range = f"A{SCAN_START_A:.2e}-{SCAN_STOP_A:.2e}"
-    d_range = f"D{SCAN_START_D:.2e}-{SCAN_STOP_D:.2e}"
-    session_dir = RESULTS_BASE_DIR / f"scan_{a_range}_{d_range}"
+    session_dir = RESULTS_BASE_DIR / SCAN_CONFIG.session_dir_name()
     session_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"Simulation session: {session_dir.name}")
 
     # 1.1 Store metadata for analysis scripts
-    metadata = {
-        "SCAN_START_A": float(SCAN_START_A),
-        "SCAN_STOP_A": float(SCAN_STOP_A),
-        "SCAN_STEP_A": float(SCAN_STEP_A),
-        "SCAN_START_D": float(SCAN_START_D),
-        "SCAN_STOP_D": float(SCAN_STOP_D),
-        "SCAN_STEP_D": float(SCAN_STEP_D),
-    }
+    metadata = SCAN_CONFIG.metadata()
     with open(session_dir / "metadata.json", "w") as f:
         json.dump(metadata, f, indent=4)
 
@@ -243,10 +237,12 @@ def main() -> None:
 
 if __name__ == "__main__":
     args = get_args()
-    SCAN_START_A = args.startA
-    SCAN_STOP_A = args.stopA
-    SCAN_STEP_A = args.stepA
-    SCAN_START_D = args.startD
-    SCAN_STOP_D = args.stopD
-    SCAN_STEP_D = args.stepD
+    SCAN_CONFIG = ScanConfig(
+        startA=args.startA,
+        stopA=args.stopA,
+        stepA=args.stepA,
+        startD=args.startD,
+        stopD=args.stopD,
+        stepD=args.stepD,
+    )
     main()
