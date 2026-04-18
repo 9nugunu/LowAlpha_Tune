@@ -14,11 +14,13 @@
 &end
 
 &alter_elements
-    name=MAL, item=DP, value=<DELTA>
+    name=MAL, item=ON_PASS, value=0
 &end
 
+&alter_elements name=MAL, item=DP,  value=<DELTA> &end
+
 &run_control
-    n_passes = 100000,
+    n_passes = 10000,
 &end
 
 &bunched_beam

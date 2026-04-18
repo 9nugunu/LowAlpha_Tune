@@ -44,12 +44,12 @@ class ScanConfig:
 # Default scan grid shared by run_pipeline.py, scan_alphac_pyele.py,
 # and process_scan_results.py when metadata is unavailable.
 DEFAULT_SCAN_CONFIG = ScanConfig(
-    startA=10e-6,
-    stopA=10e-5,
+    startA=5e-5,
+    stopA=1e-4,
     stepA=1e-6,
     startD=1.0e-5,
     stopD=2.2e-5,
-    stepD=0.2e-6,
+    stepD=0.2e-4,
 )
 
 
