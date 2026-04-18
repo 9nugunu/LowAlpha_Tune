@@ -65,12 +65,23 @@ def run(cmd: str, cwd: Path) -> bool:
     """Run a shell command in specified cwd, return True if successful."""
     print(f"Running: {cmd} (cwd={cwd})")
     try:
-        subprocess.run(cmd, shell=True, check=True, cwd=cwd, capture_output=True)
+        subprocess.run(
+            cmd,
+            shell=True,
+            check=True,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {e}")
+        if e.stdout:
+            print(f"Stdout: {e.stdout}")
         if e.stderr:
-            print(f"Stderr: {e.stderr.decode()}")
+            print(f"Stderr: {e.stderr}")
         return False
 
 
