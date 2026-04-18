@@ -18,6 +18,13 @@ SCAN_CONFIG = {
 
 PYTHON_EXE = sys.executable  # 현재 가상환경의 파이썬 사용
 
+
+def get_session_dir_name() -> str:
+    """Build the simulation session directory name using the same format as scan_alphac_pyele.py."""
+    a_range = f"A{SCAN_CONFIG['startA']:.2e}-{SCAN_CONFIG['stopA']:.2e}"
+    d_range = f"D{SCAN_CONFIG['startD']:.2e}-{SCAN_CONFIG['stopD']:.2e}"
+    return f"scan_{a_range}_{d_range}"
+
 def run_simulation():
     """단계 1: Elegant 시뮬레이션을 실행하여 데이터 생성"""
     print("\n" + "="*60)
@@ -46,8 +53,8 @@ def run_analysis():
     print("STEP 2: Starting Data Analysis & Plotting...")
     print("="*60)
     
-    # 최신 스캔 디렉토리를 자동으로 찾아서 분석하도록 설정
-    cmd = [PYTHON_EXE, "src/process_scan_results.py"]
+    # 시뮬레이션과 동일한 세션 디렉터리를 명시적으로 넘겨 latest-lookup 의존성을 제거
+    cmd = [PYTHON_EXE, "src/process_scan_results.py", "--dir", get_session_dir_name()]
     
     result = subprocess.run(cmd)
     if result.returncode != 0:

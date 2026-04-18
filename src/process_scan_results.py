@@ -146,7 +146,8 @@ def load_metadata(fdir: Path):
             )
     
     # Fallback: Parse from directory name
-    pattern = r"scan_A([\d\.eE+-]+)-([\d\.eE+-]+)_D([\d\.eE+-]+)-([\d\.eE+-]+)"
+    number = r"[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?"
+    pattern = rf"scan_A({number})-({number})_D({number})-({number})(?:_|$)"
     match = re.search(pattern, fdir.name)
     if match:
         try:
@@ -157,6 +158,36 @@ def load_metadata(fdir: Path):
         except ValueError:
             pass
     return None
+
+
+def infer_scan_axes_from_files(fdir: Path) -> tuple[np.ndarray, np.ndarray] | None:
+    """Infer raw alpha/delta scan axes from tracked file names when metadata is absent."""
+    pattern = re.compile(r"opt_A([\d\.eE+-]+)_D([\d\.eE+-]+)_check\.(?:w1|w2|param|twi)$")
+
+    alpha_values = set()
+    delta_values = set()
+
+    for path in fdir.iterdir():
+        if not path.is_file():
+            continue
+        match = pattern.match(path.name)
+        if not match:
+            continue
+        try:
+            alpha_values.add(round(float(match.group(1)), 12))
+            delta_values.add(round(float(match.group(2)), 12))
+        except ValueError:
+            continue
+
+    if not alpha_values or not delta_values:
+        return None
+
+    return np.array(sorted(alpha_values), dtype=float), np.array(sorted(delta_values), dtype=float)
+
+
+def build_scan_axis(start: float, stop: float, step: float) -> np.ndarray:
+    """Build a scan axis using the same inclusive endpoint logic as scan_alphac_pyele.py."""
+    return np.round(np.arange(start, stop + step / 100, step), 12)
 
 
 # Initialized in __main__
@@ -383,31 +414,62 @@ if __name__ == "__main__":
     params = load_metadata(FDIR)
     if params:
         scan_startA, scan_stopA, scan_stepA, scan_startD, scan_stopD, scan_stepD = params
-        print(f"Ranges Auto-detected:")
-        print(f"  A: {scan_startA:.2e} to {scan_stopA:.2e} (step: {scan_stepA:.2e})")
-        print(f"  D: {scan_startD:.2e} to {scan_stopD:.2e} (step: {scan_stepD:.2e})")
     else:
         # Final fallback to manual values if everything else fails
         scan_startA, scan_stopA, scan_stepA = 10**-5, 1.01*10**-4, 0.1*10**-5
         scan_startD, scan_stopD, scan_stepD = 1.4*10**-5, 2.6*10**-5, 0.2*10**-6
-        print("Using hardcoded fallback ranges (no metadata found).")
 
     display_scale = 10**-4
-    alpha_new = np.round(np.arange(scan_startA, scan_stopA, scan_stepA) / display_scale, 6)
-    delD_new = np.round(np.arange(scan_startD, scan_stopD, scan_stepD) / display_scale, 6)
+    inferred_axes = infer_scan_axes_from_files(FDIR)
+    if inferred_axes:
+        alpha_axis_raw, delta_axis_raw = inferred_axes
+        if params:
+            meta_alpha = build_scan_axis(scan_startA, scan_stopA, scan_stepA)
+            meta_delta = build_scan_axis(scan_startD, scan_stopD, scan_stepD)
+            if len(meta_alpha) != len(alpha_axis_raw) or len(meta_delta) != len(delta_axis_raw):
+                print("Metadata grid does not match available files. Using file-inferred grid.")
+            else:
+                print("Metadata grid matches available files.")
+        else:
+            print("Metadata not found. Using file-inferred grid.")
+        print(
+            "Grid inferred from files:"
+            f" A={alpha_axis_raw[0]:.2e}..{alpha_axis_raw[-1]:.2e} ({len(alpha_axis_raw)} points),"
+            f" D={delta_axis_raw[0]:.2e}..{delta_axis_raw[-1]:.2e} ({len(delta_axis_raw)} points)"
+        )
+    else:
+        alpha_axis_raw = build_scan_axis(scan_startA, scan_stopA, scan_stepA)
+        delta_axis_raw = build_scan_axis(scan_startD, scan_stopD, scan_stepD)
+        if params:
+            print("Ranges auto-detected from metadata:")
+            print(f"  A: {scan_startA:.2e} to {scan_stopA:.2e} (step: {scan_stepA:.2e})")
+            print(f"  D: {scan_startD:.2e} to {scan_stopD:.2e} (step: {scan_stepD:.2e})")
+        else:
+            print("Using hardcoded fallback ranges.")
+
+    alpha_new = np.round(alpha_axis_raw / display_scale, 6)
+    delD_new = np.round(delta_axis_raw / display_scale, 6)
     plotX, plotY = np.meshgrid(alpha_new, delD_new)
 
     x_csv = FDIR / "X.csv"
     z_csv = FDIR / "Z.csv"
 
     if x_csv.exists() and z_csv.exists():
-        X = pd.read_csv(x_csv, index_col=0).values
-        Z = pd.read_csv(z_csv, index_col=0).values
+        x_df = pd.read_csv(x_csv, index_col=0)
+        z_df = pd.read_csv(z_csv, index_col=0)
+
+        X = x_df.values
+        Z = z_df.values
+
+        # When cached grid CSVs already exist, trust their labeled axes rather than
+        # reconstructing a mesh from metadata or hardcoded fallback ranges.
+        alpha_new = x_df.columns.astype(float).to_numpy()
+        delD_new = x_df.index.astype(float).to_numpy()
+        plotX, plotY = np.meshgrid(alpha_new, delD_new)
     else:
         new_value = []
-        # Round the ranges to avoid floating point artifacts
-        d_range = np.round(np.arange(scan_startD, scan_stopD, scan_stepD), 12)
-        a_range = np.round(np.arange(scan_startA, scan_stopA, scan_stepA), 12)
+        d_range = delta_axis_raw
+        a_range = alpha_axis_raw
         for i in d_range:
             for k in a_range:
                 new_value.append([FDIR, i, k])
@@ -434,7 +496,76 @@ if __name__ == "__main__":
                 sys.stdout.write(f"\rProcessing Progress: [{completed}/{total_tasks}] {percent:.1f}% ")
                 sys.stdout.flush()
             
-            results = np.array(results_list)
+            def _normalize_result_row(row):
+                if row is None:
+                    return None
+                if isinstance(row, np.ndarray):
+                    if row.ndim == 0:
+                        return None
+                    if row.dtype != object:
+                        return row.astype(float, copy=False).reshape(-1).tolist()
+                    row = row.tolist()
+                elif isinstance(row, tuple):
+                    row = list(row)
+                elif not isinstance(row, list):
+                    return None
+
+                flattened = []
+                for value in row:
+                    if isinstance(value, np.ndarray):
+                        if value.ndim == 0:
+                            flattened.append(float(value))
+                        else:
+                            flattened.extend(np.asarray(value, dtype=float).reshape(-1).tolist())
+                        continue
+                    if isinstance(value, (list, tuple)):
+                        flattened.extend(np.asarray(value, dtype=float).reshape(-1).tolist())
+                        continue
+                    flattened.append(float(value))
+
+                return flattened
+
+
+            normalized_results = []
+            row_length_counts = {}
+            invalid_result_examples = []
+
+            for idx, row in enumerate(results_list):
+                try:
+                    normalized_row = _normalize_result_row(row)
+                except (TypeError, ValueError) as exc:
+                    if len(invalid_result_examples) < 5:
+                        invalid_result_examples.append(f"{idx}: {type(row).__name__} ({exc})")
+                    continue
+
+                if not normalized_row:
+                    if len(invalid_result_examples) < 5:
+                        invalid_result_examples.append(f"{idx}: empty or None result")
+                    continue
+
+                normalized_results.append(normalized_row)
+                row_length = len(normalized_row)
+                row_length_counts[row_length] = row_length_counts.get(row_length, 0) + 1
+
+            if not normalized_results:
+                raise RuntimeError("No valid analysis results were produced.")
+
+            expected_row_length = max(row_length_counts, key=row_length_counts.get)
+            valid_results = [row for row in normalized_results if len(row) == expected_row_length]
+            skipped_result_count = len(results_list) - len(valid_results)
+
+            if skipped_result_count:
+                print(
+                    f"Skipped {skipped_result_count} malformed analysis result(s) before array conversion "
+                    f"(expected row length {expected_row_length})."
+                )
+                for sample in invalid_result_examples:
+                    print(f"  Sample malformed row: {sample}")
+                unexpected_lengths = sorted(length for length in row_length_counts if length != expected_row_length)
+                if unexpected_lengths:
+                    print(f"  Unexpected row lengths seen: {unexpected_lengths}")
+
+            results = np.asarray(valid_results, dtype=float)
             mp_pool.close()
             mp_pool.join()
             print("\nProcessing complete.")

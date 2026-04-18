@@ -26,6 +26,9 @@ class ElegantDataExtractor:
         self.U_0 = 0.0
         self.T_0 = 0.0
         self.beta_x = 0.0
+        self.alpha_x = 0.0
+        self.eta_x = 0.0
+        self.eta_xp = 0.0
         self.e_x = 0.0
         self.alphac = 0.0
         self.alphac2 = 0.0
@@ -57,6 +60,22 @@ class ElegantDataExtractor:
             print(f"FAILED: {cmd_str}\nMSG: {e.output.decode('utf-8')}")
             return None
 
+    def _extract_watch_column(self, twi, column_name):
+        """Extract a Twiss column at the selected watch element."""
+        cmd = (
+            f"sddsprocess {twi} -pipe=out -match=col,ElementName={self.watch_name} "
+            f"| sdds2stream -pipe=in -column={column_name}"
+        )
+        res = self._run_cmd(cmd)
+        if not res:
+            return 0.0
+
+        try:
+            vals = res.split()
+            return float(vals[0]) if vals else 0.0
+        except ValueError:
+            return 0.0
+
     def extract_data(self):
         # Use .as_posix() for all paths
         twi = f'"{self.twiss_file.as_posix()}"'
@@ -86,16 +105,11 @@ class ElegantDataExtractor:
                 self.T_0 = length / self.c
             except ValueError: pass
 
-        # 4. Beta_x at specific element
-        # Use sddsprocess to filter rows where ElementName matches, then pipe to sdds2stream
-        cmd_beta = f"sddsprocess {twi} -pipe=out -match=col,ElementName={self.watch_name} | sdds2stream -pipe=in -column=betax"
-        res = self._run_cmd(cmd_beta)
-        if res:
-            try:
-                # If multiple lines, take the first value
-                vals = res.split()
-                if vals: self.beta_x = float(vals[0])
-            except ValueError: pass
+        # 4. Horizontal Twiss / dispersion at specific element
+        self.beta_x = self._extract_watch_column(twi, "betax")
+        self.alpha_x = self._extract_watch_column(twi, "alphax")
+        self.eta_x = self._extract_watch_column(twi, "etax")
+        self.eta_xp = self._extract_watch_column(twi, "etaxp")
 
         # 5. Emittance (ex0)
         res = self._run_cmd(f"sdds2stream {twi} -parameter=ex0")
@@ -143,6 +157,9 @@ class ElegantDataExtractor:
         print(f"U_0 (Energy Loss): {self.U_0:.4e} eV")
         print(f"T_0 (Revolution Period): {self.T_0:.4e} s")
         print(f"Beta_x at {self.watch_name}: {self.beta_x:.4f} m")
+        print(f"Alpha_x at {self.watch_name}: {self.alpha_x:.4f}")
+        print(f"Eta_x at {self.watch_name}: {self.eta_x:.4e} m")
+        print(f"Eta_xp at {self.watch_name}: {self.eta_xp:.4e}")
         print(f"Emittance_x: {self.e_x:.4e} m*rad")
         print(f"Alpha_c (Linear): {self.alphac:.4e}")
         print(f"Alpha_c2 (Quadratic): {self.alphac2:.4e}")
