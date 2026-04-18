@@ -56,8 +56,8 @@ CHECK_FILE_NAME = "check.ele"
 LTE_FILE_NAME = "mlsLA.LTE"
 RESULTS_BASE_DIR = PROJECT_ROOT / "output" / "scan_alphac_pyele"
 
-# parallel workers for sweep (adjust as needed)
-MAX_WORKERS = os.cpu_count() - 4 or 4
+# parallel workers for sweep
+MAX_WORKERS = 100 if os.name != "nt" else (os.cpu_count() - 4 or 4)
 TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
 
