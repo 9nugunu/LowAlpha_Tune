@@ -640,97 +640,148 @@ if __name__ == "__main__":
         print(f"X_main (carrier) saved to: {x_main_csv}")
         print(f"X_side (sideband) saved to: {x_side_csv}")
 
-    # Plot Z contour
-    individual_levels = build_contour_levels(
-        X,
-        Z,
-        unify_individual_colorbar_range=UNIFY_INDIVIDUAL_COLORBAR_RANGE,
-    )
-    individual_vmin, individual_vmax = get_contour_color_limits(
-        X,
-        Z,
-        unify_individual_colorbar_range=UNIFY_INDIVIDUAL_COLORBAR_RANGE,
-    )
-
-    z_figsize = (12, 9)
-    fig, ax = plt.subplots(1, 1, figsize=z_figsize)
-    cp = ax.contourf(plotX, plotY, Z, levels=individual_levels, vmin=individual_vmin, vmax=individual_vmax)
-    cbar = fig.colorbar(cp)
-    style_colorbar(cbar, z_figsize, r"Offset ($\mu\mathrm{m}$)")
-    ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
-    ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
-    style_axis(ax, z_figsize)
-    plt.tight_layout()
-    fig.savefig(OUT_DIR / "Z_offset_contour.png", dpi=300)
-
-    # Plot X contour
-    x_figsize = (12, 9)
-    fig, ax = plt.subplots(1, 1, figsize=x_figsize)
-    cp = ax.contourf(plotX, plotY, X, levels=individual_levels, vmin=individual_vmin, vmax=individual_vmax)
-    cbar = fig.colorbar(cp)
-    style_colorbar(cbar, x_figsize, r"Offset ($\mu\mathrm{m}$)")
-    ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
-    ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
-    style_axis(ax, x_figsize)
-    plt.tight_layout()
-    fig.savefig(OUT_DIR / "X_offset_contour.png", dpi=300)
-
-    # Side-by-side with unified color scale
-    vmin = min(X.min(), Z.min())
-    vmax = max(X.max(), Z.max())
-    side_figsize = (14, 6)
-    fig, axes = plt.subplots(1, 2, figsize=side_figsize, sharey=True)
-    cf1 = axes[0].contourf(plotX, plotY, Z, levels=100, vmin=vmin, vmax=vmax)
-    axes[0].set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
-    axes[0].set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
-    style_axis(axes[0], side_figsize, title=r"$Z$ offset")
-    cf2 = axes[1].contourf(plotX, plotY, X, levels=100, vmin=vmin, vmax=vmax)
-    axes[1].set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
-    style_axis(axes[1], side_figsize, title=r"$X$ offset")
-    fig.tight_layout(rect=(0, 0, 0.9, 1))
-    cbar = fig.colorbar(cf1, ax=axes, fraction=0.046, pad=0.04)
-    style_colorbar(cbar, side_figsize, r"Offset ($\mu\mathrm{m}$)")
-    fig.savefig(OUT_DIR / "XZ_offset_contour_side_by_side.png", dpi=300)
-
-    # --- New: Plot Difference (X - Z) ---
     diff = X - Z
-    max_abs = max(abs(diff.min()), abs(diff.max())) # For symmetric color scale
-    
-    diff_figsize = (12, 9)
-    fig, ax = plt.subplots(1, 1, figsize=diff_figsize)
-    # 'seismic' provides very high contrast between blue (negative) and red (positive)
-    cp = ax.contourf(plotX, plotY, diff, levels=100, cmap='seismic', vmin=-max_abs, vmax=max_abs)
+    can_plot_contours = min(Z.shape) >= 2 and min(X.shape) >= 2
 
-    # --- Highlight zero difference (X = Z) ---
-    zero_contour = ax.contour(plotX, plotY, diff, levels=[0.0], colors='magenta', linewidths=2.5)
-    
-    # Place labels at specific coordinates to widen the interval
-    # We pick points where diff is near 0
-    zi = np.where(np.abs(diff) < np.nanpercentile(np.abs(diff), 2))
-    zero_label_size = config.scaled_font_sizes(diff_figsize)['legend']
-    if len(zi[0]) > 20:
-        # Pick two points (roughly 1/4 and 3/4 along the detected indices)
-        p1_idx = len(zi[0]) // 14
-        p2_idx = (8 * len(zi[0])) // 10
-        label_locs = [
-            (plotX[zi[0][p1_idx], zi[1][p1_idx]], plotY[zi[0][p1_idx], zi[1][p1_idx]]),
-            (plotX[zi[0][p2_idx], zi[1][p2_idx]], plotY[zi[0][p2_idx], zi[1][p2_idx]])
-        ]
-        texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'}, manual=label_locs)
-        for t in texts:
-            t.set_rotation(0)
+    if can_plot_contours:
+        individual_levels = build_contour_levels(
+            X,
+            Z,
+            unify_individual_colorbar_range=UNIFY_INDIVIDUAL_COLORBAR_RANGE,
+        )
+        individual_vmin, individual_vmax = get_contour_color_limits(
+            X,
+            Z,
+            unify_individual_colorbar_range=UNIFY_INDIVIDUAL_COLORBAR_RANGE,
+        )
+
+        z_figsize = (12, 9)
+        fig, ax = plt.subplots(1, 1, figsize=z_figsize)
+        cp = ax.contourf(plotX, plotY, Z, levels=individual_levels, vmin=individual_vmin, vmax=individual_vmax)
+        cbar = fig.colorbar(cp)
+        style_colorbar(cbar, z_figsize, r"Offset ($\mu\mathrm{m}$)")
+        ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+        ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+        style_axis(ax, z_figsize)
+        plt.tight_layout()
+        fig.savefig(OUT_DIR / "Z_offset_contour.png", dpi=300)
+
+        x_figsize = (12, 9)
+        fig, ax = plt.subplots(1, 1, figsize=x_figsize)
+        cp = ax.contourf(plotX, plotY, X, levels=individual_levels, vmin=individual_vmin, vmax=individual_vmax)
+        cbar = fig.colorbar(cp)
+        style_colorbar(cbar, x_figsize, r"Offset ($\mu\mathrm{m}$)")
+        ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+        ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+        style_axis(ax, x_figsize)
+        plt.tight_layout()
+        fig.savefig(OUT_DIR / "X_offset_contour.png", dpi=300)
+
+        vmin = min(X.min(), Z.min())
+        vmax = max(X.max(), Z.max())
+        side_figsize = (14, 6)
+        fig, axes = plt.subplots(1, 2, figsize=side_figsize, sharey=True)
+        cf1 = axes[0].contourf(plotX, plotY, Z, levels=100, vmin=vmin, vmax=vmax)
+        axes[0].set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+        axes[0].set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+        style_axis(axes[0], side_figsize, title=r"$Z$ offset")
+        cf2 = axes[1].contourf(plotX, plotY, X, levels=100, vmin=vmin, vmax=vmax)
+        axes[1].set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+        style_axis(axes[1], side_figsize, title=r"$X$ offset")
+        fig.tight_layout(rect=(0, 0, 0.9, 1))
+        cbar = fig.colorbar(cf1, ax=axes, fraction=0.046, pad=0.04)
+        style_colorbar(cbar, side_figsize, r"Offset ($\mu\mathrm{m}$)")
+        fig.savefig(OUT_DIR / "XZ_offset_contour_side_by_side.png", dpi=300)
+
+        max_abs = max(abs(diff.min()), abs(diff.max()))
+        diff_figsize = (12, 9)
+        fig, ax = plt.subplots(1, 1, figsize=diff_figsize)
+        cp = ax.contourf(plotX, plotY, diff, levels=100, cmap='seismic', vmin=-max_abs, vmax=max_abs)
+        zero_contour = ax.contour(plotX, plotY, diff, levels=[0.0], colors='magenta', linewidths=2.5)
+
+        zi = np.where(np.abs(diff) < np.nanpercentile(np.abs(diff), 2))
+        zero_label_size = config.scaled_font_sizes(diff_figsize)['legend']
+        if len(zi[0]) > 20:
+            p1_idx = len(zi[0]) // 14
+            p2_idx = (8 * len(zi[0])) // 10
+            label_locs = [
+                (plotX[zi[0][p1_idx], zi[1][p1_idx]], plotY[zi[0][p1_idx], zi[1][p1_idx]]),
+                (plotX[zi[0][p2_idx], zi[1][p2_idx]], plotY[zi[0][p2_idx], zi[1][p2_idx]])
+            ]
+            texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'}, manual=label_locs)
+            for t in texts:
+                t.set_rotation(0)
+        else:
+            texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'})
+            for t in texts:
+                t.set_rotation(0)
+
+        cbar = fig.colorbar(cp)
+        style_colorbar(cbar, diff_figsize, r"$\Delta x - \Delta z$ ($\mu\mathrm{m}$)")
+        ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
+        ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
+        style_axis(ax, diff_figsize, title=r"Comparison of $X$ and $Z$ amplitudes")
+        plt.tight_layout()
+        fig.savefig(OUT_DIR / "XZ_diff_contour.png", dpi=300)
+        print(f"Difference map saved to: {OUT_DIR / 'XZ_diff_contour.png'}")
     else:
-        texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'})
-        for t in texts:
-            t.set_rotation(0)
-    
-    cbar = fig.colorbar(cp)
-    style_colorbar(cbar, diff_figsize, r"$\Delta x - \Delta z$ ($\mu\mathrm{m}$)")
-    ax.set_xlabel(r"$\alpha_c$ ($\times 10^{-4}$)")
-    ax.set_ylabel(r"$\delta$ ($\times 10^{-4}$)")
-    style_axis(ax, diff_figsize, title=r"Comparison of $X$ and $Z$ amplitudes")
-    plt.tight_layout()
-    fig.savefig(OUT_DIR / "XZ_diff_contour.png", dpi=300)
-    print(f"Difference map saved to: {OUT_DIR / 'XZ_diff_contour.png'}")
+        print(f"Contour plots require at least a 2x2 grid; got {Z.shape}. Saving 1D scan plots instead.")
+
+        if Z.shape[0] == 1 and Z.shape[1] >= 2:
+            scan_axis = plotX[0, :]
+            x_series = X[0, :]
+            z_series = Z[0, :]
+            diff_series = diff[0, :]
+            scan_label = r"$\alpha_c$ ($\times 10^{-4}$)"
+            fixed_value_text = rf"$\delta = {plotY[0, 0]:.2f} \times 10^{{-4}}$"
+        elif Z.shape[1] == 1 and Z.shape[0] >= 2:
+            scan_axis = plotY[:, 0]
+            x_series = X[:, 0]
+            z_series = Z[:, 0]
+            diff_series = diff[:, 0]
+            scan_label = r"$\delta$ ($\times 10^{-4}$)"
+            fixed_value_text = rf"$\alpha_c = {plotX[0, 0]:.2f} \times 10^{{-4}}$"
+        else:
+            raise TypeError(f"Unable to plot scan with grid shape {Z.shape}")
+
+        line_figsize = (12, 9)
+
+        fig, ax = plt.subplots(1, 1, figsize=line_figsize)
+        ax.plot(scan_axis, z_series, color="tab:blue", linewidth=3)
+        ax.set_xlabel(scan_label)
+        ax.set_ylabel(r"Offset ($\mu\mathrm{m}$)")
+        style_axis(ax, line_figsize, title=rf"$Z$ offset ({fixed_value_text})")
+        plt.tight_layout()
+        fig.savefig(OUT_DIR / "Z_offset_contour.png", dpi=300)
+
+        fig, ax = plt.subplots(1, 1, figsize=line_figsize)
+        ax.plot(scan_axis, x_series, color="tab:red", linewidth=3)
+        ax.set_xlabel(scan_label)
+        ax.set_ylabel(r"Offset ($\mu\mathrm{m}$)")
+        style_axis(ax, line_figsize, title=rf"$X$ offset ({fixed_value_text})")
+        plt.tight_layout()
+        fig.savefig(OUT_DIR / "X_offset_contour.png", dpi=300)
+
+        side_figsize = (14, 6)
+        fig, axes = plt.subplots(1, 2, figsize=side_figsize, sharey=True)
+        axes[0].plot(scan_axis, z_series, color="tab:blue", linewidth=3)
+        axes[0].set_xlabel(scan_label)
+        axes[0].set_ylabel(r"Offset ($\mu\mathrm{m}$)")
+        style_axis(axes[0], side_figsize, title=rf"$Z$ offset ({fixed_value_text})")
+        axes[1].plot(scan_axis, x_series, color="tab:red", linewidth=3)
+        axes[1].set_xlabel(scan_label)
+        style_axis(axes[1], side_figsize, title=rf"$X$ offset ({fixed_value_text})")
+        fig.tight_layout()
+        fig.savefig(OUT_DIR / "XZ_offset_contour_side_by_side.png", dpi=300)
+
+        fig, ax = plt.subplots(1, 1, figsize=line_figsize)
+        ax.plot(scan_axis, diff_series, color="magenta", linewidth=3)
+        ax.axhline(0.0, color="black", linestyle="--", linewidth=1.5, alpha=0.7)
+        ax.set_xlabel(scan_label)
+        ax.set_ylabel(r"$\Delta x - \Delta z$ ($\mu\mathrm{m}$)")
+        style_axis(ax, line_figsize, title=rf"Comparison of $X$ and $Z$ amplitudes ({fixed_value_text})")
+        plt.tight_layout()
+        fig.savefig(OUT_DIR / "XZ_diff_contour.png", dpi=300)
+        print(f"Difference map saved to: {OUT_DIR / 'XZ_diff_contour.png'}")
 
     # plt.show()
