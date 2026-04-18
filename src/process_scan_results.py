@@ -156,17 +156,17 @@ def load_metadata(fdir: Path) -> ScanConfig | None:
     
     # Fallback: Parse from directory name
     number = r"[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?"
-    pattern = rf"scan_A({number})-({number})_D({number})-({number})(?:_|$)"
+    pattern = rf"scan_A({number})-({number})(?:_sA({number}))?_D({number})-({number})(?:_sD({number}))?(?:_|$)"
     match = re.search(pattern, fdir.name)
     if match:
         try:
             return ScanConfig(
                 startA=float(match.group(1)),
                 stopA=float(match.group(2)),
-                stepA=DEFAULT_SCAN_CONFIG.stepA,
-                startD=float(match.group(3)),
-                stopD=float(match.group(4)),
-                stepD=DEFAULT_SCAN_CONFIG.stepD,
+                stepA=float(match.group(3)) if match.group(3) is not None else DEFAULT_SCAN_CONFIG.stepA,
+                startD=float(match.group(4)),
+                stopD=float(match.group(5)),
+                stepD=float(match.group(6)) if match.group(6) is not None else DEFAULT_SCAN_CONFIG.stepD,
             )
         except ValueError:
             pass
@@ -245,7 +245,7 @@ def amp_cal(p):
 
     if not fpath.exists():
         print(f"Missing: {fpath}")
-        return [0.0, 0.0, 0.0, 0.0]
+        return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     try:
         x = col_page(str(fpath), "x")
@@ -355,7 +355,7 @@ def amp_cal(p):
             plt.close()
 
         if vx == 0 or vz == 0:
-            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, vx, vz, 0.0, 0.0, 0.0, 0.0, 0.0]
+            return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, vx, vz, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
         # --- Filtering applied using defining 'bw' above ---
         
