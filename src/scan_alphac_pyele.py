@@ -56,7 +56,6 @@ OPT_FILE_NAME = "opt.ele"
 CHECK_FILE_NAME = "check.ele"
 LTE_FILE_NAME = "mlsLA.LTE"
 RESULTS_BASE_DIR = PROJECT_ROOT / "output" / "scan_alphac_pyele"
-DEFAULT_RPN_DEFNS_FILE = "run0.twi"
 
 # parallel workers for sweep (adjust as needed)
 MAX_WORKERS = os.cpu_count() - 4 or 4
@@ -83,11 +82,6 @@ def resolve_rpn_defns_path(cli_override: str | None) -> str | None:
     env_path = os.environ.get("RPN_DEFNS")
     if env_path:
         return str(Path(env_path).expanduser().resolve())
-
-    fallback = FALLBACK_INPUT_DIR / DEFAULT_RPN_DEFNS_FILE
-    if fallback.exists():
-        print(f"RPN_DEFNS is not set. Using fallback: {fallback}")
-        return str(fallback.resolve())
 
     return None
 
@@ -275,13 +269,13 @@ def main() -> None:
         stepD=args.stepD,
     )
     RPN_DEFNS_PATH = resolve_rpn_defns_path(args.rpn_defns)
-    if not RPN_DEFNS_PATH:
-        print("ERROR: RPN_DEFNS is not set and no fallback input file was found.")
-        print("Set RPN_DEFNS or pass --rpn-defns <path_to_rpn_file>.")
-        return
-    if not Path(RPN_DEFNS_PATH).exists():
+    if RPN_DEFNS_PATH and not Path(RPN_DEFNS_PATH).exists():
         print(f"ERROR: RPN_DEFNS path does not exist: {RPN_DEFNS_PATH}")
         return
+    if RPN_DEFNS_PATH:
+        print(f"Using RPN_DEFNS: {RPN_DEFNS_PATH}")
+    else:
+        print("RPN_DEFNS override not provided. Using the current process environment as-is.")
 
     if not _elegant_available():
         print("ERROR: 'elegant' was not found on PATH.")
