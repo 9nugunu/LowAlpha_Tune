@@ -24,6 +24,8 @@ wheels/
 # Claude Code
 CLAUDE.md
 .claude/
+AGENTS.md
+.omx/
 
 # IDE settings
 .vscode/
