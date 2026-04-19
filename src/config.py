@@ -27,8 +27,10 @@ class ScanConfig:
 
     def session_dir_name(self) -> str:
         a_range = f"A{self.startA:.2e}-{self.stopA:.2e}"
+        a_step = f"sA{self.stepA:.2e}"
         d_range = f"D{self.startD:.2e}-{self.stopD:.2e}"
-        return f"scan_{a_range}_{d_range}"
+        d_step = f"sD{self.stepD:.2e}"
+        return f"scan_{a_range}_{a_step}_{d_range}_{d_step}"
 
     def metadata(self) -> dict[str, float]:
         return {
@@ -49,7 +51,7 @@ DEFAULT_SCAN_CONFIG = ScanConfig(
     stepA=1e-6,
     startD=1.0e-5,
     stopD=2.2e-5,
-    stepD=0.2e-4,
+    stepD=0.2e-6,
 )
 
 
@@ -96,7 +98,21 @@ SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04-x_signal_50000_on
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_ROOT = BASE_DIR / "output" / "scan_alphac_pyele"
 CONFIGURED_SCAN_DIR = OUTPUT_ROOT / SCAN_FOLDER_NAME
-LATEST_SCAN_DIR = CONFIGURED_SCAN_DIR
+
+
+def _resolve_latest_scan_dir(output_root: Path, configured_scan_dir: Path) -> Path:
+    if configured_scan_dir.exists():
+        return configured_scan_dir
+
+    if output_root.exists():
+        scan_dirs = [path for path in output_root.iterdir() if path.is_dir() and path.name.startswith("scan_")]
+        if scan_dirs:
+            return max(scan_dirs, key=lambda path: path.stat().st_mtime)
+
+    return configured_scan_dir
+
+
+LATEST_SCAN_DIR = _resolve_latest_scan_dir(OUTPUT_ROOT, CONFIGURED_SCAN_DIR)
 
 # --- Instrumentation & Calibration Parameters ---
 POS_SENSITIVITY = 388.0    # mV / mm / nC

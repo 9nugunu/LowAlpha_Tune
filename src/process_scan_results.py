@@ -99,8 +99,8 @@ def get_parser(argv: list[str] | None = None):
     parser.add_argument(
         "--dir",
         type=str,
-        default=SCAN_FOLDER_NAME,
-        help="Specific scan directory name to process. Defaults to src.config.SCAN_FOLDER_NAME.",
+        default=None,
+        help="Specific scan directory name to process. Defaults to the latest available scan session.",
     )
     parser.add_argument(
         "--unify-individual-colorbar-range",
