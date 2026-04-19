@@ -699,22 +699,32 @@ if __name__ == "__main__":
         cp = ax.contourf(plotX, plotY, diff, levels=100, cmap='seismic', vmin=-max_abs, vmax=max_abs)
         zero_contour = ax.contour(plotX, plotY, diff, levels=[0.0], colors='magenta', linewidths=2.5)
 
-        zi = np.where(np.abs(diff) < np.nanpercentile(np.abs(diff), 2))
         zero_label_size = config.scaled_font_sizes(diff_figsize)['legend']
-        if len(zi[0]) > 20:
-            p1_idx = len(zi[0]) // 14
-            p2_idx = (8 * len(zi[0])) // 10
-            label_locs = [
-                (plotX[zi[0][p1_idx], zi[1][p1_idx]], plotY[zi[0][p1_idx], zi[1][p1_idx]]),
-                (plotX[zi[0][p2_idx], zi[1][p2_idx]], plotY[zi[0][p2_idx], zi[1][p2_idx]])
-            ]
-            texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'}, manual=label_locs)
-            for t in texts:
-                t.set_rotation(0)
-        else:
-            texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'})
-            for t in texts:
-                t.set_rotation(0)
+        zero_segments = []
+        if zero_contour.allsegs and zero_contour.allsegs[0]:
+            zero_segments = [segment for segment in zero_contour.allsegs[0] if len(segment) > 1]
+
+        texts = []
+        if zero_segments:
+            zero_segments.sort(key=len, reverse=True)
+            label_locs = []
+            for segment in zero_segments[:2]:
+                for frac in (0.3, 0.7):
+                    idx = min(len(segment) - 1, max(0, int(frac * (len(segment) - 1))))
+                    label_locs.append((segment[idx, 0], segment[idx, 1]))
+            try:
+                texts = ax.clabel(
+                    zero_contour,
+                    inline=True,
+                    fontsize=zero_label_size,
+                    fmt={0.0: '0'},
+                    manual=label_locs,
+                )
+            except (TypeError, ValueError):
+                texts = ax.clabel(zero_contour, inline=True, fontsize=zero_label_size, fmt={0.0: '0'})
+
+        for t in texts:
+            t.set_rotation(0)
 
         cbar = fig.colorbar(cp)
         style_colorbar(cbar, diff_figsize, r"$\Delta x - \Delta z$ ($\mu\mathrm{m}$)")
