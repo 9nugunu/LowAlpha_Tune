@@ -131,6 +131,19 @@ def z_offset(alpha: np.ndarray, delta: np.ndarray, params: MachineParams = PARAM
     return (alpha - 1 / params.gam**2) * params.c / w_s * delta
 
 
+def alpha_from_synchrotron_frequency(
+    fs_hz: float | np.ndarray,
+    params: MachineParams = PARAMS,
+) -> float | np.ndarray:
+    """Inverse calculation of alpha_c from synchrotron frequency."""
+    f_rev = 1.0 / params.T_0
+    harmonic_number = params.f_rf / f_rev
+    cos_phi = np.abs(np.cos(params.phi_s))
+    numerator = 2.0 * np.pi * params.E_0
+    denominator = harmonic_number * params.V_rf * cos_phi
+    return (np.asarray(fs_hz) / f_rev) ** 2 * (numerator / denominator)
+
+
 def offset_to_power_dbm(offset_um: np.ndarray) -> np.ndarray:
     """Convert offset in micrometers to power in dBm."""
     v_peak_mv = POS_SENSITIVITY * (offset_um / 1000.0) * BUNCH_CHARGE_NC
