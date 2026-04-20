@@ -21,8 +21,11 @@ class MachineParams:
         self.T_0 = T_REV                      # s (from config)
         self.gam = self.E_0 / 0.511e6 + 1
 
-        # Lattice / RF
+        # Lattice / RF (at WISLANDP)
         self.beta_x = 7.08                    # m
+        self.alpha_x = 0.03154                # Twiss alpha
+        self.eta_x = -0.5571                  # m, horizontal dispersion
+        self.eta_xp = -0.07704                # dispersion derivative
         self.V_rf = 0.5e6                     # V
         self.f_rf = 500e6                     # Hz
         self.w_rf = 2 * np.pi * self.f_rf     # rad/s
@@ -34,6 +37,10 @@ class MachineParams:
 
         # Derived
         self.phi_s = np.pi - np.arcsin(self.U_0 / self.V_rf)
+        gamma_x = (1 + self.alpha_x**2) / self.beta_x
+        self.H_x = (gamma_x * self.eta_x**2
+                     + 2 * self.alpha_x * self.eta_x * self.eta_xp
+                     + self.beta_x * self.eta_xp**2)  # m, dispersion invariant
 
 
 PARAMS = MachineParams()
@@ -119,10 +126,17 @@ def induced_sideband_offset(
 
 
 def x_offset(alpha: np.ndarray, delta: np.ndarray, params: MachineParams = PARAMS) -> np.ndarray:
-    """Transverse offset via Bessel J1. Factor of 2 for both sidebands (vx +/- vz)."""
+    """Transverse offset via Bessel J1. Factor of 2 for both sidebands (vx +/- vz).
+
+    Uses the off-momentum corrected betatron amplitude:
+        sqrt(e_x * beta_x + H_x * delta^2)
+    where H_x is the dispersion invariant (curly-H).
+    """
     w_s = synchrotron_frequency(alpha, params)
     mu_s = w_s * params.T_0 / (2 * np.pi)
-    return np.sqrt(params.e_x * params.beta_x) * 2 * sp.j1(delta / mu_s)
+    delta_arr = np.asarray(delta, dtype=float)
+    amplitude = np.sqrt(params.e_x * params.beta_x + params.H_x * delta_arr**2)
+    return amplitude * 2 * sp.j1(delta_arr / mu_s)
 
 
 def z_offset(alpha: np.ndarray, delta: np.ndarray, params: MachineParams = PARAMS) -> np.ndarray:
