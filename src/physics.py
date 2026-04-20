@@ -80,6 +80,44 @@ def synchrotron_frequency_higher_order(
     )
 
 
+def synchrotron_tune(
+    alpha: np.ndarray,
+    delta: np.ndarray | None = None,
+    order: int = 1,
+    params: MachineParams = PARAMS,
+) -> np.ndarray:
+    """Synchrotron tune mu_s = w_s T0 / (2 pi) for the selected momentum-compaction order."""
+    alpha_array = np.asarray(alpha, dtype=float)
+    if order == 1 or delta is None:
+        w_s = synchrotron_frequency(alpha_array, params)
+    else:
+        w_s = synchrotron_frequency_higher_order(alpha_array, np.asarray(delta, dtype=float), order=order, params=params)
+    return w_s * params.T_0 / (2 * np.pi)
+
+
+def sideband_modulation(
+    alpha: np.ndarray,
+    delta: np.ndarray,
+    order: int = 1,
+    params: MachineParams = PARAMS,
+) -> np.ndarray:
+    """Dimensionless 2J1(delta / mu_s) modulation factor for synchrotron sidebands."""
+    delta_array = np.asarray(delta, dtype=float)
+    mu_s = synchrotron_tune(alpha, delta_array, order=order, params=params)
+    return 2.0 * sp.j1(delta_array / mu_s)
+
+
+def induced_sideband_offset(
+    x_main: np.ndarray,
+    alpha: np.ndarray,
+    delta: np.ndarray,
+    order: int = 1,
+    params: MachineParams = PARAMS,
+) -> np.ndarray:
+    """Induced sideband offset from a main-line amplitude times the synchrotron modulation."""
+    return np.asarray(x_main, dtype=float) * sideband_modulation(alpha, delta, order=order, params=params)
+
+
 def x_offset(alpha: np.ndarray, delta: np.ndarray, params: MachineParams = PARAMS) -> np.ndarray:
     """Transverse offset via Bessel J1. Factor of 2 for both sidebands (vx +/- vz)."""
     w_s = synchrotron_frequency(alpha, params)
