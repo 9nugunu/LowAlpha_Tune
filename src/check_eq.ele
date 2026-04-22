@@ -1,0 +1,104 @@
+! check_eq.ele - Equilibrium-regime tracking for MLS low-alpha study
+!
+! Works around two elegant 2025.3.0 issues that caused SIGSEGV/empty-bunch:
+!   (1) &moments_output equilibrium=1 crashes post-write.
+!   (2) &bunched_beam rejects rpn variable names (emit_x = ex0), so
+!       use_twiss_command_values alone leaves emit_x/sigma_dp/sigma_s at 0
+!       and all particles collapse to the reference orbit.
+!
+! Strategy: inject emittance/spread as macro literals, generate %s.bun in
+! Run 1, then reload via &sdds_beam in Run 2 with the single-pass MAL DP kick.
+!
+! Macro parameters (supplied by launcher):
+!   lattice  : optimized lattice file (e.g. <rootname>_opt.new)
+!   rootname : output prefix
+!   DELTA    : MAL DP kick magnitude (first-pass only)
+!   EMITX    : horizontal emittance (ex0 from twiss radiation_integrals)
+!   SIGDP    : relative energy spread (Sdelta0)
+!   SIGS     : rms bunch length in meters (6e-3 nominal for MLS)
+!   NPASSES  : tracking turns in Run 2
+
+! ------------------------------------------------------------------------------
+! Run 1: twiss (radiation integrals) + equilibrium Gaussian bunch generation
+! ------------------------------------------------------------------------------
+&run_setup
+    lattice = <lattice>,
+    use_beamline = RING,
+    p_central_mev = 629,
+    rootname = <rootname>,
+    parameters = %s.param,
+    semaphore_file = %s.done,
+    default_order = 3,
+&end
+
+&alter_elements name=*, type=CSBEN*, item=SYNCH_RAD, value=1 &end
+&alter_elements name=*, type=CSBEN*, item=ISR, value=1 &end
+
+&closed_orbit
+    output = %s.clo,
+&end
+
+&twiss_output
+    filename = %s_check.twi,
+    matched = 1,
+    radiation_integrals = 1,
+    output_at_each_step = 0,
+&end
+
+&run_control
+    n_passes = 1,
+&end
+
+&bunched_beam
+    bunch = %s.bun,
+    n_particles_per_bunch = 10000,
+    use_twiss_command_values = 1,
+    emit_x = <EMITX>,
+    emit_y = <EMITX>,
+    sigma_dp = <SIGDP>,
+    sigma_s = <SIGS>,
+    distribution_type[0] = "gaussian",
+    distribution_type[1] = "gaussian",
+    distribution_type[2] = "gaussian",
+    distribution_cutoff[0] = 3,
+    distribution_cutoff[1] = 3,
+    distribution_cutoff[2] = 3,
+    one_random_bunch = 1,
+    symmetrize = 1,
+    save_initial_coordinates = 1,
+&end
+
+&track
+&end
+
+! ------------------------------------------------------------------------------
+! Run 2: reload equilibrium bunch, apply single-pass MAL DP kick, track
+! ------------------------------------------------------------------------------
+&run_setup
+    lattice = <lattice>,
+    use_beamline = RING,
+    p_central_mev = 629,
+    rootname = <rootname>,
+    parameters = %s.param,
+    semaphore_file = %s.done,
+    default_order = 3,
+&end
+
+&alter_elements name=*, type=CSBEN*, item=SYNCH_RAD, value=1 &end
+&alter_elements name=*, type=CSBEN*, item=ISR, value=1 &end
+
+&alter_elements name=MAL, item=ON_PASS, value=0 &end
+&alter_elements name=MAL, item=DP, value=<DELTA> &end
+
+&run_control
+    n_passes = <NPASSES>,
+&end
+
+&sdds_beam
+    input = %s.bun,
+    input_type = "elegant",
+    save_initial_coordinates = 1,
+&end
+
+&track
+&end
