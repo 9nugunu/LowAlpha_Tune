@@ -14,7 +14,13 @@ import shlex
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import DEFAULT_SCAN_CONFIG, ScanConfig, build_scan_axis
+from src.config import (
+    DEFAULT_EQ_CONFIG,
+    DEFAULT_SCAN_CONFIG,
+    EqBunchConfig,
+    ScanConfig,
+    build_scan_axis,
+)
 
 
 def get_args(argv: list[str] | None = None):
@@ -62,18 +68,8 @@ MAX_WORKERS = 8 if os.name != "nt" else (os.cpu_count() - 4 or 4)
 TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
 
-# Equilibrium bunch parameters (literal values injected into check_eq.ele).
-# Rationale: elegant 2025.3.0 &moments_output equilibrium=1 crashes, and
-# &bunched_beam rejects rpn refs (emit_x = ex0), so we pass the twiss
-# radiation_integrals values as macro literals instead. The values below are
-# taken from the matched twiss of the low-alpha optics (alphac ~ 6e-5) and
-# are approximately alpha-independent across the scan range.
-EQ_EMITX = 1.974e-7   # horizontal emittance [m*rad]
-EQ_SIGDP = 4.42e-4    # relative energy spread
-EQ_SIGS = 6.0e-3      # rms bunch length [m] (MLS operational value)
-EQ_NPASSES = 50000    # tracking turns for equilibrium sideband analysis
-
 SCAN_CONFIG = DEFAULT_SCAN_CONFIG
+EQ_CONFIG = DEFAULT_EQ_CONFIG
 
 
 def resolve_source_file(name: str) -> Path | None:
@@ -195,10 +191,10 @@ def run_single_check(rootname: str, work_dir: Path) -> bool:
     macro_parts = [
         f"lattice={lattice_file.name}",
         f"rootname={rootname}",
-        f"EMITX={EQ_EMITX:.6e}",
-        f"SIGDP={EQ_SIGDP:.6e}",
-        f"SIGS={EQ_SIGS:.6e}",
-        f"NPASSES={EQ_NPASSES}",
+        f"EMITX={EQ_CONFIG.emit_x:.6e}",
+        f"SIGDP={EQ_CONFIG.sigma_dp:.6e}",
+        f"SIGS={EQ_CONFIG.sigma_s:.6e}",
+        f"NPASSES={EQ_CONFIG.n_passes}",
     ]
     if delta_target is not None:
         macro_parts.append(f"DELTA={delta_target:.6e}")
@@ -287,13 +283,7 @@ def main() -> None:
     print(f"Simulation session (EQUILIBRIUM REGIME): {session_dir.name}")
 
     # 1.1 Store metadata for analysis scripts
-    metadata = SCAN_CONFIG.metadata()
-    metadata["regime"] = "equilibrium"
-    metadata["n_particles"] = 10000
-    metadata["n_passes"] = EQ_NPASSES
-    metadata["emit_x"] = EQ_EMITX
-    metadata["sigma_dp"] = EQ_SIGDP
-    metadata["sigma_s"] = EQ_SIGS
+    metadata = {**SCAN_CONFIG.metadata(), **EQ_CONFIG.metadata()}
     with open(session_dir / "metadata.json", "w") as f:
         json.dump(metadata, f, indent=4)
 

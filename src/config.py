@@ -55,6 +55,43 @@ DEFAULT_SCAN_CONFIG = ScanConfig(
 )
 
 
+@dataclass(frozen=True)
+class EqBunchConfig:
+    """Equilibrium bunch parameters injected into check_eq.ele as macros.
+
+    Elegant 2025.3.0 crashes on &moments_output equilibrium=1 and rejects
+    rpn variable names in &bunched_beam (e.g. emit_x = ex0), so the
+    equilibrium-regime launcher passes these as numeric macro literals.
+    Values are taken from the matched twiss of the MLS low-alpha optics
+    and are approximately alpha-independent across the scan range.
+    """
+
+    emit_x: float  # horizontal emittance [m*rad]
+    sigma_dp: float  # relative energy spread
+    sigma_s: float  # rms bunch length [m]
+    n_passes: int  # tracking turns in Run 2
+    n_particles: int  # particles per bunch in Run 1
+
+    def metadata(self) -> dict[str, float]:
+        return {
+            "regime": "equilibrium",
+            "n_particles": self.n_particles,
+            "n_passes": self.n_passes,
+            "emit_x": self.emit_x,
+            "sigma_dp": self.sigma_dp,
+            "sigma_s": self.sigma_s,
+        }
+
+
+DEFAULT_EQ_CONFIG = EqBunchConfig(
+    emit_x=1.974e-7,
+    sigma_dp=4.42e-4,
+    sigma_s=6.0e-3,
+    n_passes=50000,
+    n_particles=10000,
+)
+
+
 def build_scan_axis(start: float, stop: float, step: float) -> np.ndarray:
     """Build a scan axis with inclusive endpoint logic shared by scan and analysis."""
     start = _normalized(start)
