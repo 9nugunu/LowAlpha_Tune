@@ -1,25 +1,29 @@
 ! check_eq.ele - Equilibrium-regime tracking for MLS low-alpha study
 !
-! Works around two elegant 2025.3.0 issues that caused SIGSEGV/empty-bunch:
-!   (1) &moments_output equilibrium=1 crashes post-write.
-!   (2) &bunched_beam rejects rpn variable names (emit_x = ex0), so
-!       use_twiss_command_values alone leaves emit_x/sigma_dp/sigma_s at 0
-!       and all particles collapse to the reference orbit.
+! Self-contained: elegant computes equilibrium emittance / energy spread
+! (twiss radiation_integrals) and bunch length (rf_setup) internally,
+! and rpn_load re-injects the on-disk parameters as tagged rpn variables
+! (tw.ex0, tw.Sdelta0, rpn-native Sz0) that &bunched_beam can read.
 !
-! Strategy: inject emittance/spread as macro literals, generate %s.bun in
-! Run 1, then reload via &sdds_beam in Run 2 with the single-pass MAL DP kick.
+! Works around two elegant 2025.3.0 issues encountered earlier:
+!   (1) &moments_output equilibrium=1 crashes with SIGSEGV.
+!   (2) &bunched_beam without rpn parenthesized expressions or with
+!       use_twiss_command_values alone leaves emit_x/sigma_dp/sigma_s
+!       at 0 and all particles collapse to the reference orbit.
 !
 ! Macro parameters (supplied by launcher):
 !   lattice  : optimized lattice file (e.g. <rootname>_opt.new)
 !   rootname : output prefix
 !   DELTA    : MAL DP kick magnitude (first-pass only)
-!   EMITX    : horizontal emittance (ex0 from twiss radiation_integrals)
-!   SIGDP    : relative energy spread (Sdelta0)
-!   SIGS     : rms bunch length in meters (6e-3 nominal for MLS)
 !   NPASSES  : tracking turns in Run 2
+!
+! Lattice-dependent values (emit_x, Sdelta0, Sz0) no longer need to be
+! injected as macro literals -- elegant derives them from the lattice and
+! RF settings at run time, which keeps the scan physically self-consistent
+! across the (alphac, delta) grid.
 
 ! ------------------------------------------------------------------------------
-! Run 1: twiss (radiation integrals) + equilibrium Gaussian bunch generation
+! Run 1: twiss + rf_setup -> rpn_load -> equilibrium Gaussian bunch
 ! ------------------------------------------------------------------------------
 &run_setup
     lattice = <lattice>,
@@ -45,6 +49,18 @@
     output_at_each_step = 0,
 &end
 
+&rpn_load
+    filename = %s_check.twi,
+    tag = tw,
+    load_parameters = 1,
+&end
+
+&rf_setup
+    filename = %s_rf.sdds,
+    harmonic = 80,
+    total_voltage = 0.5e6,
+&end
+
 &run_control
     n_passes = 1,
 &end
@@ -53,10 +69,10 @@
     bunch = %s.bun,
     n_particles_per_bunch = 10000,
     use_twiss_command_values = 1,
-    emit_x = <EMITX>,
-    emit_y = <EMITX>,
-    sigma_dp = <SIGDP>,
-    sigma_s = <SIGS>,
+    emit_x   = "(tw.ex0)",
+    emit_y   = "(tw.ex0)",
+    sigma_dp = "(tw.Sdelta0)",
+    sigma_s  = "(Sz0)",
     distribution_type[0] = "gaussian",
     distribution_type[1] = "gaussian",
     distribution_type[2] = "gaussian",
