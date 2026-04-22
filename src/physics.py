@@ -87,6 +87,22 @@ def synchrotron_frequency_higher_order(
     )
 
 
+def equilibrium_bunch_length(
+    alpha: np.ndarray | float,
+    sigma_delta: float,
+    params: MachineParams = PARAMS,
+) -> np.ndarray | float:
+    """Zero-current equilibrium rms bunch length sigma_s.
+
+    sigma_s = c * |alpha| * sigma_delta / w_s, with w_s from the linear
+    synchrotron frequency formula. This is the theoretical Gaussian bunch
+    length in the absence of harmonic cavities, potential-well distortion,
+    and impedance-driven lengthening.
+    """
+    w_s = synchrotron_frequency(np.asarray(alpha, dtype=float), params)
+    return params.c * np.abs(np.asarray(alpha, dtype=float)) * sigma_delta / w_s
+
+
 def synchrotron_tune(
     alpha: np.ndarray,
     delta: np.ndarray | None = None,

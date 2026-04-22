@@ -62,13 +62,17 @@ class EqBunchConfig:
     Elegant 2025.3.0 crashes on &moments_output equilibrium=1 and rejects
     rpn variable names in &bunched_beam (e.g. emit_x = ex0), so the
     equilibrium-regime launcher passes these as numeric macro literals.
-    Values are taken from the matched twiss of the MLS low-alpha optics
-    and are approximately alpha-independent across the scan range.
+
+    emit_x and sigma_dp are taken from the matched twiss of the MLS
+    low-alpha optics and are approximately alpha-independent across the
+    scan range. sigma_s, however, depends strongly on alpha via the
+    synchrotron frequency and must be computed per scan point using
+    physics.equilibrium_bunch_length(alpha, sigma_dp). It is intentionally
+    not stored here.
     """
 
     emit_x: float  # horizontal emittance [m*rad]
-    sigma_dp: float  # relative energy spread
-    sigma_s: float  # rms bunch length [m]
+    sigma_dp: float  # relative energy spread (also used to derive sigma_s)
     n_passes: int  # tracking turns in Run 2
     n_particles: int  # particles per bunch in Run 1
 
@@ -79,14 +83,12 @@ class EqBunchConfig:
             "n_passes": self.n_passes,
             "emit_x": self.emit_x,
             "sigma_dp": self.sigma_dp,
-            "sigma_s": self.sigma_s,
         }
 
 
 DEFAULT_EQ_CONFIG = EqBunchConfig(
     emit_x=1.974e-7,
     sigma_dp=4.42e-4,
-    sigma_s=6.0e-3,
     n_passes=50000,
     n_particles=10000,
 )

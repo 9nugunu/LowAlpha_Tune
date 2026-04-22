@@ -21,6 +21,7 @@ from src.config import (
     ScanConfig,
     build_scan_axis,
 )
+from src.physics import equilibrium_bunch_length
 
 
 def get_args(argv: list[str] | None = None):
@@ -180,24 +181,34 @@ def run_single_check(rootname: str, work_dir: Path) -> bool:
     if not lattice_file.exists():
         return False
 
-    # Extract delta from the rootname (format opt_A{alpha}_D{delta})
+    # Parse alpha and delta from rootname (format opt_A{alpha:.2e}_D{delta:.2e})
+    alpha_target = None
     delta_target = None
     try:
-        delta_str = rootname.split("_D")[-1]
-        delta_target = float(delta_str)
+        _, alpha_str, delta_str = rootname.split("_")
+        alpha_target = float(alpha_str.lstrip("A"))
+        delta_target = float(delta_str.lstrip("D"))
     except Exception:
         pass
+
+    if alpha_target is None or delta_target is None:
+        print(f"[!] Failed to parse alpha/delta from rootname: {rootname}")
+        return False
+
+    # sigma_s must be computed per-alpha: the equilibrium bunch length scales
+    # as sqrt(alpha) via the synchrotron frequency, so a fixed value would
+    # give the wrong bunch shape across the scan and distort sideband amplitudes.
+    sigma_s = float(equilibrium_bunch_length(alpha_target, EQ_CONFIG.sigma_dp))
 
     macro_parts = [
         f"lattice={lattice_file.name}",
         f"rootname={rootname}",
         f"EMITX={EQ_CONFIG.emit_x:.6e}",
         f"SIGDP={EQ_CONFIG.sigma_dp:.6e}",
-        f"SIGS={EQ_CONFIG.sigma_s:.6e}",
+        f"SIGS={sigma_s:.6e}",
         f"NPASSES={EQ_CONFIG.n_passes}",
+        f"DELTA={delta_target:.6e}",
     ]
-    if delta_target is not None:
-        macro_parts.append(f"DELTA={delta_target:.6e}")
 
     cmd = [
         ELEGANT_CMD,
