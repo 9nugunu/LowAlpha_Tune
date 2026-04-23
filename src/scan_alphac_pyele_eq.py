@@ -66,9 +66,12 @@ CHECK_FILE_NAME = "check_eq.ele"  # <-- CHANGED: equilibrium-regime tracking
 LTE_FILE_NAME = "mlsLA.LTE"
 RESULTS_BASE_DIR = PROJECT_ROOT / "output" / "scan_alphac_pyele_eq"  # <-- separate results dir
 
-# equilibrium tracking is much heavier (10k particles x 50k turns + radiation)
-# reduce parallelism vs. original scan
-MAX_WORKERS = 8 if os.name != "nt" else (os.cpu_count() - 4 or 4)
+# Parallel workers for the scan. equilibrium tracking is heavy
+# (10k particles x 50k turns + radiation), so respect the server's core
+# count. Override via MAX_WORKERS env var when needed; defaults are
+# 64 on Linux and (cpu_count - 4) on Windows.
+_DEFAULT_MAX_WORKERS = 64 if os.name != "nt" else (os.cpu_count() - 4 or 4)
+MAX_WORKERS = int(os.environ.get("MAX_WORKERS", _DEFAULT_MAX_WORKERS))
 TEST_MODE = False  # Set to True for quick testing with limited steps
 TEST_MAX_STEPS = 2
 
