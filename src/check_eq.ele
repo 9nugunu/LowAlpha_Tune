@@ -38,6 +38,13 @@
 &alter_elements name=*, type=CSBEN*, item=SYNCH_RAD, value=1 &end
 &alter_elements name=*, type=CSBEN*, item=ISR, value=1 &end
 
+! Disable the full-coord watch (Wislandp -> .w2) -- equilibrium tracking
+! with 10k particles x 50k turns generates ~30 GB of per-particle data
+! per point which the downstream FFT does not need. The centroid watch
+! Wisland (-> .w1) still records per-turn Cx, and process_scan_results.py
+! runs the same FFT on that centroid column.
+&alter_elements name=WISLANDP, item=DISABLE, value=1 &end
+
 &closed_orbit
     output = %s.clo,
 &end
@@ -102,6 +109,7 @@
 
 &alter_elements name=*, type=CSBEN*, item=SYNCH_RAD, value=1 &end
 &alter_elements name=*, type=CSBEN*, item=ISR, value=1 &end
+&alter_elements name=WISLANDP, item=DISABLE, value=1 &end
 
 &alter_elements name=MAL, item=ON_PASS, value=0 &end
 &alter_elements name=MAL, item=DP, value=<DELTA> &end

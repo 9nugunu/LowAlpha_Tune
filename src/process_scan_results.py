@@ -241,20 +241,39 @@ def filtering_norm(freq, data, cen_f, cutoff, ttt, vz=0.0):
 
 def amp_cal(p):
     fdir, valD, valA = p
-    file_name = f"opt_A{valA:.2e}_D{valD:.2e}_check.w2"
-    fpath = fdir / file_name
+    w2_name = f"opt_A{valA:.2e}_D{valD:.2e}_check.w2"
+    w1_name = f"opt_A{valA:.2e}_D{valD:.2e}_check.w1"
+    w2_path = fdir / w2_name
+    w1_path = fdir / w1_name
 
-    if not fpath.exists():
-        print(f"Missing: {fpath}")
+    # Prefer the centroid watch output (.w1): its Cx column is exactly the
+    # per-turn centroid for both 1-particle induced runs (where the single
+    # particle trajectory equals the centroid) and N-particle equilibrium
+    # runs (where elegant averages Wisland mode=centroid automatically).
+    # Fall back to the full-coord watch (.w2) for legacy scans that did
+    # not emit .w1 -- those were single-particle anyway so .w2.x is the
+    # right signal there.
+    if w1_path.exists():
+        source_path = w1_path
+        x_col, t_col = "Cx", "dCt"
+    elif w2_path.exists():
+        source_path = w2_path
+        x_col, t_col = "x", "dt"
+    else:
+        print(f"Missing: {w1_path} (and {w2_path})")
         return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     try:
-        x = col_page(str(fpath), "x")
-        t = col_page(str(fpath), "dt") * c0
-        
-        freq = fftshift(fftfreq(len(x), T0)) / 10**6
-        fft_x = fftshift(fft(x.ravel()))
-        fft_z = fftshift(fft(t.ravel()))
+        x = col_page(str(source_path), x_col).ravel()
+        t = col_page(str(source_path), t_col).ravel() * c0
+
+        # Use the total sample count (post-ravel) for the FFT frequency grid.
+        # col_page returns a (n_pages, n_rows_per_page) array and len(x) on
+        # the 2-D form returned pages, not samples -- that silently broke
+        # FFT for .w1 (1 page x N turns) centroid data.
+        freq = fftshift(fftfreq(x.size, T0)) / 10**6
+        fft_x = fftshift(fft(x))
+        fft_z = fftshift(fft(t))
 
         # --- Peak Detection (Initial for Tune Determination) ---
         amp_x = np.abs(fft_x)
@@ -402,7 +421,7 @@ def amp_cal(p):
             X_comb_amp                  # 12: X combined (Main + Side)
         ]
     except Exception as e:
-        # print(f"Error processing {fpath.name}: {e}")
+        print(f"Error processing {source_path.name}: {e}")
         return [round(valA / 10**-4, 8), round(valD / 10**-4, 8), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 if __name__ == "__main__":
