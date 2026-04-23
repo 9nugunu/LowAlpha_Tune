@@ -213,24 +213,23 @@ def run_single_check(rootname: str, work_dir: Path) -> bool:
 
     success = run(cmd, cwd=work_dir)
 
-    # Rename tracking outputs and verify .w2 is present.
-    # v3 check_eq.ele does not emit .mom (moments_output was removed to work
-    # around an elegant 2025.3.0 SIGSEGV). .bun is the regenerated equilibrium
-    # bunch and is kept per-point for reproducibility.
-    found_w2 = False
+    # Rename tracking outputs and verify the centroid watch (.w1) is present.
+    # check_eq.ele disables the per-particle watch (WISLANDP -> .w2) to keep
+    # disk usage manageable, so .w1 is the authoritative success marker.
+    # .w2 is still renamed if present (legacy scans that didn't disable it).
+    found_w1 = False
     for ext in (".w1", ".w2", ".param", ".bun"):
         src = work_dir / f"{rootname}{ext}"
         if src.exists():
             dst = work_dir / f"{rootname}_check{ext}"
-            # Use the new robust rename function
             try:
                 if safe_rename(src, dst):
-                    if ext == ".w2":
-                        found_w2 = True
+                    if ext == ".w1":
+                        found_w1 = True
             except Exception as e:
                 print(f"Failed to rename {src.name} after retries: {e}")
-    
-    return success and found_w2
+
+    return success and found_w1
 
 
 def run_checks(rootnames: list[str], work_dir: Path) -> None:
@@ -325,9 +324,11 @@ def main() -> None:
     
     # Final check: compare requested points with produced files
     print(f"\nFinal Directory Audit of {session_dir}:")
+    w1_count = len(list(session_dir.glob("*_check.w1")))
     w2_count = len(list(session_dir.glob("*_check.w2")))
     bun_count = len(list(session_dir.glob("*_check.bun")))
-    print(f"Total *_check.w2 files found: {w2_count}")
+    print(f"Total *_check.w1 files found: {w1_count}")
+    print(f"Total *_check.w2 files found: {w2_count}  (disabled by default)")
     print(f"Total *_check.bun files found: {bun_count}")
     
     print(f"\nAll tasks processed. Results stored in: {session_dir}")
