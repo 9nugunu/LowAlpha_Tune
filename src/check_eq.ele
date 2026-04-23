@@ -67,7 +67,7 @@
 
 &bunched_beam
     bunch = %s.bun,
-    n_particles_per_bunch = 10000,
+    n_particles_per_bunch = <NPARTICLES>,
     use_twiss_command_values = 1,
     emit_x   = "(tw.ex0)",
     emit_y   = "(tw.ex0)",

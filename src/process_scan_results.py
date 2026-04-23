@@ -121,6 +121,7 @@ def get_latest_scan_dir():
     search_paths = [
         PROJECT_ROOT / "scan_elegant" / "results",
         PROJECT_ROOT / "output" / "scan_alphac_pyele",
+        PROJECT_ROOT / "output" / "scan_alphac_pyele_eq",
         PROJECT_ROOT / "results",
         PROJECT_ROOT / "input" / "results" / "scan_elegant" / "results",
         PROJECT_ROOT / "Archieves",

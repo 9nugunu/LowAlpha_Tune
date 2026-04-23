@@ -31,6 +31,10 @@ def get_args(argv: list[str] | None = None):
     parser.add_argument("--startD", type=float, default=DEFAULT_SCAN_CONFIG.startD)
     parser.add_argument("--stopD", type=float, default=DEFAULT_SCAN_CONFIG.stopD)
     parser.add_argument("--stepD", type=float, default=DEFAULT_SCAN_CONFIG.stepD)
+    parser.add_argument("--n-particles", type=int, default=DEFAULT_EQ_CONFIG.n_particles,
+                        help="Override particles per bunch (useful for cheap local tests).")
+    parser.add_argument("--n-passes", type=int, default=DEFAULT_EQ_CONFIG.n_passes,
+                        help="Override tracking turns in Run 2.")
     return parser.parse_args(argv)
 
 
@@ -193,6 +197,7 @@ def run_single_check(rootname: str, work_dir: Path) -> bool:
     macro_parts = [
         f"lattice={lattice_file.name}",
         f"rootname={rootname}",
+        f"NPARTICLES={EQ_CONFIG.n_particles}",
         f"NPASSES={EQ_CONFIG.n_passes}",
         f"DELTA={delta_target:.6e}",
     ]
@@ -258,7 +263,7 @@ def run_checks(rootnames: list[str], work_dir: Path) -> None:
 
 
 def main() -> None:
-    global SCAN_CONFIG
+    global SCAN_CONFIG, EQ_CONFIG
     args = get_args()
     SCAN_CONFIG = ScanConfig(
         startA=args.startA,
@@ -267,6 +272,10 @@ def main() -> None:
         startD=args.startD,
         stopD=args.stopD,
         stepD=args.stepD,
+    )
+    EQ_CONFIG = EqBunchConfig(
+        n_particles=args.n_particles,
+        n_passes=args.n_passes,
     )
 
     if not _elegant_available():

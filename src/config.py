@@ -125,7 +125,26 @@ SCAN_FOLDER_NAME = "scan_A1.00e-05-1.10e-04_D1.00e-04-2.40e-04-x_signal_50000_on
 
 
 BASE_DIR = Path(__file__).parent.parent
-OUTPUT_ROOT = BASE_DIR / "output" / "scan_alphac_pyele"
+
+# Analysis scripts default to the induced-regime output root but will fall
+# back to the equilibrium-regime root (scan_alphac_pyele_eq) when the
+# induced root has no matching scan -- this lets the same analysis code
+# operate on either scan type. Override with LOW_ALPHA_OUTPUT_ROOT if
+# you want a custom location.
+_OUTPUT_ROOT_CANDIDATES = (
+    BASE_DIR / "output" / "scan_alphac_pyele",
+    BASE_DIR / "output" / "scan_alphac_pyele_eq",
+)
+
+import os as _os
+_env_root = _os.environ.get("LOW_ALPHA_OUTPUT_ROOT")
+if _env_root:
+    OUTPUT_ROOT = Path(_env_root)
+    # When an explicit root is chosen, restrict the search to that root.
+    _OUTPUT_ROOT_CANDIDATES = (OUTPUT_ROOT,)
+else:
+    OUTPUT_ROOT = _OUTPUT_ROOT_CANDIDATES[0]
+
 CONFIGURED_SCAN_DIR = OUTPUT_ROOT / SCAN_FOLDER_NAME
 
 
@@ -133,10 +152,29 @@ def _resolve_latest_scan_dir(output_root: Path, configured_scan_dir: Path) -> Pa
     if configured_scan_dir.exists():
         return configured_scan_dir
 
-    if output_root.exists():
-        scan_dirs = [path for path in output_root.iterdir() if path.is_dir() and path.name.startswith("scan_")]
-        if scan_dirs:
-            return max(scan_dirs, key=lambda path: path.stat().st_mtime)
+    # Candidate roots: the explicit output_root first (honors env override),
+    # then the other built-in candidates as a fallback.
+    search_roots: list[Path] = [output_root]
+    for root in _OUTPUT_ROOT_CANDIDATES:
+        if root != output_root:
+            search_roots.append(root)
+
+    # First pass: look for the configured scan name in any search root.
+    for root in search_roots:
+        candidate = root / SCAN_FOLDER_NAME
+        if candidate.exists():
+            return candidate
+
+    # Second pass: pick the most recent scan across all search roots.
+    all_scans: list[Path] = []
+    for root in search_roots:
+        if root.exists():
+            all_scans.extend(
+                path for path in root.iterdir()
+                if path.is_dir() and path.name.startswith("scan_")
+            )
+    if all_scans:
+        return max(all_scans, key=lambda path: path.stat().st_mtime)
 
     return configured_scan_dir
 
